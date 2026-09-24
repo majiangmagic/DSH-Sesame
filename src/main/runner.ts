@@ -31,7 +31,13 @@ import { readSettings, splitArgs } from './settings'
  */
 
 /** dsh 就绪时打印的那行。原版同一个正则（server.js:70）。 */
-const READY_RE = /dsh web:\s+(https?:\/\/[^\s]+)/
+/**
+ * dsh 就绪时打印的那行（`dsh web: http://…`）。
+ *
+ * 导出给 diagnose.ts 复用 —— 判定"已就绪"这件事只该有一处实现，
+ * 否则诊断模块会自己写一版，然后漏掉"已就绪后静默是正常的"。
+ */
+export const READY_RE = /dsh web:\s+(https?:\/\/[^\s]+)/
 
 /**
  * 启动超时。给得比较宽：某个版本**首次**启动可能要现场装依赖，
@@ -127,7 +133,7 @@ async function resolvePort(configured: number): Promise<number> {
 }
 
 /** dsh 启动参数。profile 与额外参数都来自设置（`<userData>/settings.json`）。 */
-function bootArgs(profile: string, port: number): string[] {
+export function bootArgs(profile: string, port: number): string[] {
   /*
    * 端口来自设置（默认 3080），**不再是 0**。
    *
