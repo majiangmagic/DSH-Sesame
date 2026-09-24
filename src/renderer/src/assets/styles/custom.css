@@ -1,4 +1,4 @@
-/*
+﻿/*
  * DSH-Sesame 新增界面。
  *
  * ⚠️ 这个文件里的**全部规则都是新增的**，是为"控制页加插件开关 + 版本管理"
@@ -1113,8 +1113,17 @@ main,
  * 换成这条不问形状的规则：选择器权重与 components.css 的 `.form-row input` 相同，
  * 但 custom.css 在它之后加载，所以稳定胜出，且对 wide / number / text / select 一视同仁。
  */
-.preferences input,
-.preferences select {
+/*
+ * 表单行里的输入框与下拉框一律左对齐。
+ *
+ * 这条原来写在 .preferences 作用域里（只覆盖设置页），于是每加一个新页面
+ * 就回落到原版的 `.form-row input { text-align: right }`、又变成右对齐 ——
+ * 用户为此反馈过三次。改成按**语义**（表单行）写，一次管住所有页面。
+ * 注意宽度不在这里给：`.form-row.wide input { width: 100% }` 那种写法会连带
+ * 把「额外启动参数」那行撑坏（曾经踩过），宽度只在下面的 .inline-input 里给。
+ */
+.form-row input,
+.form-row select {
   text-align: left;
 }
 
@@ -1170,35 +1179,67 @@ main,
  * 教训：给新加的元素写样式，选择器要**限定到那个元素**（.inline-input 是数据目录独有的），
  * 不要按"看起来差不多的形状"去写通配规则。
  */
-.preferences .form-row.wide .inline-input {
+/*
+ * 「输入框 + 按钮」并排的那种行。
+ *
+ * .inline-input 只在需要并排时使用，所以按**结构**选它最稳：
+ * 不会牵连「额外启动参数」那类普通整行输入框。
+ * 原来这套写在 .extra-options 作用域下（后来我又复制了一份到 .preferences），
+ * 结果快照页又缺一次 —— 现在收敛成这一处。
+ */
+.form-row.wide .inline-input {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.preferences .form-row.wide .inline-input input {
+.form-row.wide .inline-input input {
   flex: 1 1 auto;
   min-width: 0;
-  width: 100%;
-  text-align: left;
 }
 
 #pickDshHome {
   flex: 0 0 auto;
 }
 
-/* 快照页的布局：**照抄** #view-releases 那组规则（同样的"卡片内可滚动"需求），
-   不手写、不改原规则 —— 上一轮的 CSS 手写踩过坑（选择器写太宽把别的行改坏）。 */
-
-
-/* ---- 版本管理页（新增的独立标签页） ---- */
-
 /*
- * 原版的居中规则只列了 #view-control / #view-store / #view-preferences，
- * 新增的 #view-snapshots 要自己补一份，否则卡片会贴在左上角。
+ * 快照页的布局。
+ *
+ * 上一轮我是"程序化照抄 #view-releases 那组规则"来拿到可滚动布局的 ——
+ * 那解决了当时的问题，但留下了"借别人的面板样式"这件事。这里保留照抄的布局规则，
+ * 但不再依赖 .panel.versions 这个借来的类名（组件里已改成普通 .panel）。
  */
 #view-snapshots {
-  align-items: center;
+  display: flex;
   justify-content: center;
-  padding: 24px;
+  align-items: flex-start;
+  padding-top: 24px;
+}
+
+/* 快照面板：照抄 .versions 那套（同样的卡片/滚动需求），不手写 */
+
+
+/* 与 .panel.module-panel 同样的约束：撑满可用高度，列表在卡片内部滚动 */
+.panel.snapshots {
+  width: min(720px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+
+
+/*
+ * 快照页的布局。
+ *
+ * 上一轮我是"程序化照抄 #view-releases 那组规则"来拿到可滚动布局的 ——
+ * 那解决了当时的问题，但留下了"借别人的面板样式"这件事。这里保留照抄的布局规则，
+ * 但不再依赖 .panel.snapshots 这个借来的类名（组件里已改成普通 .panel）。
+ */
+#view-snapshots {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 24px;
 }

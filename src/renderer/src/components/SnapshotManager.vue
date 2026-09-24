@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api'
@@ -65,7 +65,7 @@ onMounted(refresh)
 
 <template>
   <div id="view-snapshots" class="view view-active">
-    <div class="panel versions">
+    <div class="panel snapshots">
       <h3 class="card-title">{{ t('snap.title') }}</h3>
 
       <div class="form-row wide">
@@ -84,10 +84,6 @@ onMounted(refresh)
           </button>
         </div>
       </div>
-
-      <p class="status-line" id="snapPaths" v-if="paths">
-        {{ paths.root }}
-      </p>
 
       <ul class="plugin-list" id="snapList" v-if="list.length > 0">
         <li class="plugin-row" v-for="s in list" :key="s.id">
@@ -108,7 +104,6 @@ onMounted(refresh)
           </button>
         </li>
       </ul>
-      <p class="status-line" v-else>{{ t('snap.empty') }}</p>
 
       <p class="status-line" id="snapKeep">{{ t('snap.keep') }}</p>
     </div>

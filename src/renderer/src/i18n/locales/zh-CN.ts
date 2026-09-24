@@ -13,7 +13,6 @@ export default {
     create: "存一份",
     restore: "回退到此",
     files: "个文件",
-    empty: "还没有快照。点「存一份」建立第一个。",
     keep: "最多保留 10 份，超出自动删最旧的。插件安装/升级/开关之前会自动存一份。",
     created: "已存快照",
     restored: "已回退 {n} 个文件（回退前那份是 {backup}）",
@@ -103,7 +102,6 @@ export default {
   plugins: {
     title: '插件',
     refresh: '刷新',
-    empty: '这个 profile 里没有已安装的插件。',
     disabled: '已禁用',
     rows: '行 {ids}',
     subtitle: '{profile} profile · 共 {total} 个 · {on} 个启用',

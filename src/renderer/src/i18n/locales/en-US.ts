@@ -15,7 +15,6 @@ const enUS: typeof zhCN = {
     create: "Save one",
     restore: "Restore",
     files: "files",
-    empty: "No snapshots yet. Click \"Save one\" to create the first.",
     keep: "Keeps at most 10; the oldest is pruned. A snapshot is also taken automatically before plugin install/update/toggle.",
     created: "Snapshot saved",
     restored: "Restored {n} files (the pre-rollback one is {backup})",
@@ -106,7 +105,6 @@ const enUS: typeof zhCN = {
   plugins: {
     title: 'Plugins',
     refresh: 'Refresh',
-    empty: 'No plugins installed in this profile.',
     disabled: 'Disabled',
     rows: 'rows {ids}',
     subtitle: '{profile} profile · {total} total · {on} enabled',
