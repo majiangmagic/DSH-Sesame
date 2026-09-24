@@ -1105,7 +1105,16 @@ main,
  * `.form-row.wide input`（额外参数那一行）本来就是 text-align: left，所以这里
  * 只覆盖非 wide 的，不动长文本框。
  */
-.preferences .form-row:not(.wide) input {
+/*
+ * 设置页里所有输入框与下拉框一律左对齐。
+ *
+ * 之前这里写的是 `.form-row:not(.wide) input` —— **分情况的写法，然后新加的字段是
+ * .wide，就没被覆盖到，又变成右对齐**（用户第二次反馈"又右侧对齐"）。
+ * 换成这条不问形状的规则：选择器权重与 components.css 的 `.form-row input` 相同，
+ * 但 custom.css 在它之后加载，所以稳定胜出，且对 wide / number / text / select 一视同仁。
+ */
+.preferences input,
+.preferences select {
   text-align: left;
 }
 

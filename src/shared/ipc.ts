@@ -11,6 +11,8 @@ export const WINDOW_CHANNELS = {
   close: 'window:close',
   isMaximized: 'window:is-maximized',
   maximizedChanged: 'window:maximized-changed',
+  pickDirectory:
+    'window:pickDirectory' as const,
   openExternal: 'shell:open-external'
 } as const
 

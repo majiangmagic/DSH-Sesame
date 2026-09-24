@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { BrowserWindow, ipcMain, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { WINDOW_CHANNELS } from '@shared/ipc'
 import { APP_ORIGIN } from './protocol'
 
@@ -112,6 +112,21 @@ export function registerWindowIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.on(WINDOW_CHANNELS.close, () => getWindow()?.close())
 
   ipcMain.handle(WINDOW_CHANNELS.isMaximized, () => getWindow()?.isMaximized() ?? false)
+
+  /**
+   * 选目录。给「数据目录」这类需要在磁盘上指位置的设置用。
+   *
+   * 为什么必须走主进程：渲染层没有 Node，拿不到原生文件选择器。
+   * 取消时返回 null（调用方据此保持原值，不要清空）。
+   */
+  ipcMain.handle(WINDOW_CHANNELS.pickDirectory, async () => {
+    const win = getWindow()
+    const result = win
+      ? await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
+      : await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0] ?? null
+  })
 
   ipcMain.handle(WINDOW_CHANNELS.openExternal, async (_event, url: unknown) => {
     const target = String(url ?? '')

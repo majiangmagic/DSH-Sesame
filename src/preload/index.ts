@@ -29,6 +29,8 @@ const api = {
     toggleMaximize: (): void => ipcRenderer.send(WINDOW_CHANNELS.toggleMaximize),
     close: (): void => ipcRenderer.send(WINDOW_CHANNELS.close),
     isMaximized: (): Promise<boolean> => ipcRenderer.invoke(WINDOW_CHANNELS.isMaximized),
+    /** 打开原生目录选择器；取消时返回 null */
+    pickDirectory: (): Promise<string | null> => ipcRenderer.invoke(WINDOW_CHANNELS.pickDirectory),
 
     /** 订阅最大化状态变化，返回取消订阅函数。 */
     onMaximizedChanged: (listener: (maximized: boolean) => void): (() => void) => {

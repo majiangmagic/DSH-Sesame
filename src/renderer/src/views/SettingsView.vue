@@ -60,6 +60,15 @@ watch(
   }
 )
 
+/**
+ * 选数据目录。走主进程的原生选择器（渲染层没有 Node）。
+ * 取消时**不要清空**已有值 —— 用户按了取消，不是要清掉。
+ */
+async function pickDshHome(): Promise<void> {
+  const picked = await window.sesame.window.pickDirectory()
+  if (picked !== null && draft.value) draft.value.dshHome = picked
+}
+
 async function save(): Promise<void> {
   if (!draft.value) return
   const next = await api.saveSettings({ ...draft.value })
@@ -99,14 +108,20 @@ onMounted(async () => {
       -->
       <label class="form-row wide">
         <span>{{ t('settings.dshHome') }}</span>
-        <input
-          id="dshHome"
-          type="text"
-          spellcheck="false"
-          autocomplete="off"
-          :placeholder="t('settings.dshHomePlaceholder')"
-          v-model="draft.dshHome"
-        />
+        <!-- 输入框 + 浏览按钮并排：用原版就有的 .inline-input 结构，不自己发明布局 -->
+        <div class="inline-input">
+          <input
+            id="dshHome"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            :placeholder="t('settings.dshHomePlaceholder')"
+            v-model="draft.dshHome"
+          />
+          <button class="subtle-button" id="pickDshHome" type="button" @click="pickDshHome">
+            {{ t('settings.browse') }}
+          </button>
+        </div>
       </label>
       <p class="status-line">{{ t('settings.dshHomeHint') }}</p>
 
