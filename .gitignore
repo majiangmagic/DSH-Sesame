@@ -14,3 +14,6 @@ Thumbs.db
 
 # 已安装的 dsh 版本（应用旁边的相对路径版本池，见 src/main/paths.ts）
 dsh/
+
+# 内置 Node 的暂存目录（脚本生成，不进仓库）
+node-bundle/

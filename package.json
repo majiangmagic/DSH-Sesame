@@ -13,9 +13,10 @@
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:market": "node scripts/check-market-version.mjs",
+    "bundle:node": "node scripts/bundle-node.mjs",
     "pack": "npm run typecheck && npm run build && electron-builder --dir",
     "dist": "npm run typecheck && npm run build && electron-builder",
-    "release": "npm run dist && node scripts/publish-release.mjs"
+    "release": "node scripts/bundle-node.mjs && npm run dist && node scripts/publish-release.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

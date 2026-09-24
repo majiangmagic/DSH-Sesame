@@ -16,7 +16,9 @@ dsh 的桌面启动器 —— 用 Electron + Vue 3 + TypeScript 写的图形界�
 2. 打开后到「版本」页下载一个 dsh 版本
 3. 回「控制」页点启动，就绪后点开那个地址
 
-**前置要求**：机器上要有 Node.js —— 启动器必须用真正的 `node.exe` 拉起 dsh（dsh 的加载器不接受 Electron 自带的 V8，原因见 `src/main/runtime.ts`）。
+**关于 Node**：安装包里**自带**一份 Node 作为兜底，所以目标机器上没装 Node 也能跑。
+若系统里已有 Node，启动器优先用系统的那个（解析顺序：`DSH_NODE` 环境变量 → PATH → 包内自带）。
+必须用真正的 `node.exe`：dsh 的加载器不接受 Electron 自带的 V8，原因见 `src/main/runtime.ts`。
 
 ## 开发
 

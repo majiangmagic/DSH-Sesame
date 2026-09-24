@@ -24,6 +24,13 @@ files:
 
 asar: true
 
+# 自带 Node 运行时：落到 <安装目录>/node/node.exe —— 正是 src/main/runtime.ts 找的位置
+# （解析顺序：DSH_NODE 环境变量 → PATH → 这里）。用户机器上没装 Node 也能跑。
+# 文件由 scripts/bundle-node.mjs 生成到 node-bundle/（该目录不入库，88MB 的二进制不该进 git）。
+extraFiles:
+  - from: node-bundle/node
+    to: node
+
 win:
   icon: resources/icon.ico
   target:

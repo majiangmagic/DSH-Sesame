@@ -9,7 +9,10 @@ cd <项目目录>
 npm run release
 ```
 
-它等于 `npm run dist && node scripts/publish-release.mjs`，分两步是有意的：
+它等于 `node scripts/bundle-node.mjs && npm run dist && node scripts/publish-release.mjs`，分三步是有意的：
+
+- **`node scripts/bundle-node.mjs`** —— 把当前这个 `node.exe` 拷进 `node-bundle/node/`，供打包时内置
+  （`node-bundle/` 不入库；88 MB 的二进制不该进 git）。单独跑用 `npm run bundle:node`
 
 - **`npm run dist`** —— typecheck + 编译 + electron-builder 打包，产物先写进**暂存目录**（不直接进顶层）
 - **`node scripts/publish-release.mjs`** —— 确认构建完整（安装包非空）之后，才把产物提到顶层并删掉暂存目录
