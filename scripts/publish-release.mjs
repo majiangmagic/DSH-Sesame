@@ -23,7 +23,6 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(fileURLToPath(import.meta.url))
 // 默认取**项目目录的同级目录**（用脚本自身位置推算，所以与谁在哪台机器上克隆无关）。
-// 需要换位置时用环境变量 SESAME_RELEASE_DIR 覆盖。
 /**
  * 从 electron-builder.yml 的 `output:` 反推成品目录与暂存目录名。
  *
@@ -51,7 +50,7 @@ function resolveFromYml() {
 }
 
 const fromYml = resolveFromYml()
-const TARGET = process.env['SESAME_RELEASE_DIR'] ?? fromYml.target
+const TARGET = fromYml.target
 const STAGE_NAME = fromYml.stage
 const SOURCE = join(TARGET, STAGE_NAME)
 const dryRun = process.argv.includes('--dry-run')

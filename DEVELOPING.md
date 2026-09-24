@@ -16,7 +16,7 @@ npm run release
 
 **为什么要分两步**：失败的构建会在暂存目录里留下看起来正常的半成品；先暂存、校验后再提，发布目录里就只会有完整的产物。
 
-成品位置由 `electron-builder.yml` 的 `output:` 决定（默认是**与本项目平级**的 `DSH-Sesame-release\`）—— 发布脚本会读它，所以只有那一处定义；临时改到别处也可以用环境变量 `SESAME_RELEASE_DIR`。产物是 `DSH-Sesame-Setup-<版本>.exe` 及其 `.blockmap`、`latest.yml`（后两者由 electron-builder 自动生成）。
+成品位置由 `electron-builder.yml` 的 `output:` 决定（默认是**与本项目平级**的 `DSH-Sesame-release\`）—— 发布脚本会读它，所以**只有那一处定义**；想换位置就改这一行。产物是 `DSH-Sesame-Setup-<版本>.exe` 及其 `.blockmap`、`latest.yml`（后两者由 electron-builder 自动生成）。
 
 ## 命令
 
