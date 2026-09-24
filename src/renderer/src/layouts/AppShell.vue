@@ -3,6 +3,9 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import WinControls from '@/components/WinControls.vue'
+import { useUiStore } from '@/stores/ui'
+import { useVersionsStore } from '@/stores/versions'
+import { api } from '@/api'
 
 /**
  * 顶栏 + 页面容器。
@@ -31,6 +34,44 @@ const TABS: Array<{ path: string; label: string }> = [
 ]
 
 const version = __APP_VERSION__
+const ui = useUiStore()
+const versions = useVersionsStore()
+
+/**
+ * 端口回退提示。
+ *
+ * 设置里是固定端口（默认 3080），但 runner 发现被占用时会**回退到系统分配的空闲端口**
+ * 并只在终端页写一行日志 —— 用户在控制页只看到地址变了，不知道发生了什么
+ * （"换了倒是弹个气泡告诉一声啊"）。
+ *
+ * 这里不新增 IPC：就绪地址里带着真实端口，和设置里的端口一比就知道有没有回退。
+ * 每个地址只提示一次，避免轮询反复弹。
+ */
+const configuredPort = ref<number | null>(null)
+let noticedUrl = ''
+
+void api.getSettings().then((s) => {
+  configuredPort.value = s.port
+})
+
+watch(
+  () => versions.running?.url ?? '',
+  (url) => {
+    if (url === '' || url === noticedUrl || configuredPort.value === null) return
+    let actual = 0
+    try {
+      actual = Number(new URL(url).port)
+    } catch {
+      return
+    }
+    if (actual === 0 || actual === configuredPort.value) return
+    noticedUrl = url
+    ui.showBubble(
+      t('home.portFallback', { configured: configuredPort.value, actual })
+    )
+  },
+  { immediate: true }
+)
 const navEl = ref<HTMLElement | null>(null)
 const transitionClass = ref('')
 /** 启动器自身有新版本时才显示；本阶段没有逻辑驱动，恒为 false */
@@ -98,6 +139,12 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
       <WinControls />
     </div>
   </header>
+  <!--
+    轻提示气泡。挂在 header 之后，任何页面都能看到 —— 端口回退发生在"启动"那一刻，
+    而那时用户可能已经切到别的标签页了。
+  -->
+  <div v-if="ui.bubble" class="app-bubble" role="status">{{ ui.bubble }}</div>
+
   <main>
     <router-view v-slot="{ Component }">
       <component :is="Component" :class="transitionClass" />

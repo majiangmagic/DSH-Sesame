@@ -66,6 +66,7 @@ export default {
     noVersions: '暂无版本',
     hint: '插件和数据在用户目录的 .dsh。',
     actionUpdate: '更新',
+    portFallback: '端口 {configured} 已被占用，改至 {actual} 启动',
     actionStart: '启动',
     actionStop: '停止'
   },

@@ -69,6 +69,7 @@ const enUS: typeof zhCN = {
     noVersions: 'No versions',
     hint: 'Plugins and data live in .dsh in your home directory.',
     actionUpdate: 'Update',
+    portFallback: 'Port {configured} is taken — started on {actual} instead',
     actionStart: 'Start',
     actionStop: 'Stop'
   },
