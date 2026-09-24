@@ -18,7 +18,7 @@ files:
   - resources/**
   - package.json
   - '!**/*.{ts,tsx,vue,scss,css.map}'
-  - '!**/{.editorconfig,.gitignore,.npmrc,README.md}'
+  - '!**/{.editorconfig,.gitignore,.npmrc,README.md,DEVELOPING.md}'
   - '!**/{tsconfig.json,tsconfig.node.json,tsconfig.web.json,electron.vite.config.ts,electron-builder.yml}'
   - '!scripts/**'
 
