@@ -14,19 +14,32 @@ import { app } from 'electron'
  *   lang       界面语言 —— 渲染层用，主进程只是存
  *   args       额外启动参数 —— 追加到 `dsh <profile> …` 末尾
  *   profile    启动 profile —— 目前只有 `web` 能真正跑起来，见 runner 的守卫
+ *   port       启动端口 —— 固定端口，默认 DEFAULT_PORT（原来是 `--port 0` 让系统随便挑）
  */
+/**
+ * 默认启动端口。
+ *
+ * 原版用 `--port 0` 让系统挑空闲端口 —— 好处是永远不会"端口被占"，代价是
+ * **每次启动地址都不一样**，用户没法把界面存成书签、也没法记住地址。
+ * 改成固定端口（可用设置覆盖）。占用时由 runner 明确报错，而不是悄悄换一个 ——
+ * "东一个西一个"正是要避免的那件事。
+ */
+export const DEFAULT_PORT = 3080
+
 export interface LauncherSettings {
   autoStart: boolean
   lang: 'zh' | 'en'
   args: string
   profile: string
+  port: number
 }
 
 const DEFAULTS: LauncherSettings = {
   autoStart: false,
   lang: 'zh',
   args: '',
-  profile: 'web'
+  profile: 'web',
+  port: DEFAULT_PORT
 }
 
 function file(): string {
@@ -42,7 +55,15 @@ export function readSettings(): LauncherSettings {
       autoStart: typeof parsed.autoStart === 'boolean' ? parsed.autoStart : DEFAULTS.autoStart,
       lang: parsed.lang === 'en' ? 'en' : DEFAULTS.lang,
       args: typeof parsed.args === 'string' ? parsed.args : DEFAULTS.args,
-      profile: typeof parsed.profile === 'string' && parsed.profile !== '' ? parsed.profile : DEFAULTS.profile
+      profile: typeof parsed.profile === 'string' && parsed.profile !== '' ? parsed.profile : DEFAULTS.profile,
+  // 端口必须是 1~65535 的整数；1024 以下需要管理员权限，一并挡掉给出默认值
+  port:
+    typeof parsed.port === 'number' &&
+    Number.isInteger(parsed.port) &&
+    parsed.port >= 1024 &&
+    parsed.port <= 65535
+      ? parsed.port
+      : DEFAULTS.port
     }
   } catch {
     return { ...DEFAULTS }

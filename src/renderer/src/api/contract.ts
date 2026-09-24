@@ -44,6 +44,8 @@ export interface SettingsPayload {
   args: string
   /** 启动 profile：只有 web 能在启动器窗口里跑起来 */
   profile: string
+  /** 启动端口（1024~65535）。固定端口，默认 3080；占用时启动会明确报错 */
+  port: number
 }
 
 export interface RunningState {

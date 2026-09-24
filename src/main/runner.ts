@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import type { VersionStatus } from '@shared/versions'
 import { dshHome, profileDir } from './dshHome'
 import { versionBin } from './paths'
+import { createServer } from 'node:net'
 import { requireNode } from './runtime'
 import { pushTagged } from './logbus'
 import { readSettings, splitArgs } from './settings'
@@ -89,9 +90,56 @@ function envFor(version: string, node: { path: string }, profile: string): NodeJ
   }
 }
 
+/** 这个端口现在能不能绑。只探测，不占用。 */
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer()
+    probe.once('error', () => resolve(false))
+    probe.once('listening', () => probe.close(() => resolve(true)))
+    probe.listen(port, '127.0.0.1')
+  })
+}
+
+/**
+ * 决定这次用哪个端口。
+ *
+ * 策略（用户明确要求）：**先试设置的固定端口；被占用时回退到系统分配**（`--port 0`），
+ * 但**必须写日志说清为什么、换到了哪** —— "自己找完就找完了"是不行的：
+ * 静默换端口会让地址重新变得不可预期，用户会以为是启动器坏了或端口设置没生效。
+ *
+ * 也不能像最初设想的那样直接报错不启动 —— 占用是常见情况（比如上一次的 dsh 没退干净），
+ * 因此回退 + 告知，而不是拒绝服务。
+ */
+async function resolvePort(configured: number): Promise<number> {
+  if (!Number.isInteger(configured) || configured < 1024 || configured > 65535) return 0
+  if (await isPortFree(configured)) return configured
+  pushTagged(
+    '启动器',
+    `端口 ${configured} 已被占用（可能是上一次的 dsh 没退干净，或别的程序在用），` +
+      `改用系统分配的空闲端口启动。就绪地址见下一行；想固定端口请在「设置 → 启动端口」里换一个。`
+  )
+  return 0
+}
+
 /** dsh 启动参数。profile 与额外参数都来自设置（`<userData>/settings.json`）。 */
-function bootArgs(profile: string): string[] {
-  return [profile, '--host', '127.0.0.1', '--port', '0', '--no-open', ...splitArgs(readSettings().args)]
+function bootArgs(profile: string, port: number): string[] {
+  /*
+   * 端口来自设置（默认 3080），**不再是 0**。
+   *
+   * 原来 `--port 0` 让系统挑空闲端口：永不会冲突，但每次地址都变，用户没法收藏、
+   * 也没法记住。现在固定端口；被占用时 dsh 会绑不上，而启动器要等满
+   * `START_TIMEOUT_MS`（180 秒）才报"就绪超时"—— 那个错误完全看不出是端口问题。
+   * 所以 startVersion 里先前置探测一次端口（见 assertPortFree）。
+   */
+  return [
+    profile,
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(port),
+    '--no-open',
+    ...splitArgs(readSettings().args)
+  ]
 }
 
 /** 杀整棵进程树。Windows 必须用 taskkill /T，否则 worker 线程会变成孤儿。 */
@@ -260,7 +308,9 @@ export async function startVersion(version: string): Promise<RunState> {
     // 建不出来就让 dsh 自己报错，别在这里吞掉真实原因
   }
 
-  const child = spawn(node.path, [bin, ...bootArgs(profile)], {
+  // 端口在这里定：先试固定端口，占用则回退（并已写日志说明）
+  const port = await resolvePort(readSettings().port)
+  const child = spawn(node.path, [bin, ...bootArgs(profile, port)], {
     cwd: home,
     env: envFor(version, node, profile),
     stdio: ['ignore', 'pipe', 'pipe'],

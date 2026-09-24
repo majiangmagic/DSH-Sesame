@@ -162,7 +162,13 @@ export function registerBusinessIpc(): void {
         ...(typeof patch.autoStart === 'boolean' ? { autoStart: patch.autoStart } : {}),
         ...(patch.lang === 'en' || patch.lang === 'zh' ? { lang: patch.lang } : {}),
         ...(typeof patch.args === 'string' ? { args: patch.args } : {}),
-        ...(typeof patch.profile === 'string' && patch.profile !== '' ? { profile: patch.profile } : {})
+        ...(typeof patch.profile === 'string' && patch.profile !== '' ? { profile: patch.profile } : {}),
+      ...(typeof patch.port === 'number' &&
+      Number.isInteger(patch.port) &&
+      patch.port >= 1024 &&
+      patch.port <= 65535
+        ? { port: patch.port }
+        : {})
       })
       pushTagged('启动器', `设置已保存（profile=${next.profile}${next.args ? ` · 参数 ${next.args}` : ''}）`)
       return next

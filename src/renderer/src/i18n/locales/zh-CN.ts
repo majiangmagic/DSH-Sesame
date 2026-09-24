@@ -167,6 +167,7 @@ export default {
     args: '额外启动参数',
     argsPlaceholder: '例如：--log-level debug',
     argsHint: '追加到 dsh 命令行末尾（空格分词，含空格的值用引号包起来）。已装的插件、数据不受影响。',
+    portHint: 'dsh web 服务绑定的端口，默认 3080。被占用时启动会明确报错，不会自动换端口',
     dataDir: '版本目录',
     browse: '浏览…',
     save: '保存',

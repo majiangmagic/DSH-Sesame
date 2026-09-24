@@ -89,6 +89,8 @@ export interface LauncherSettingsPayload {
   args: string
   /** 启动 profile。只有 `web` 能在启动器窗口里跑起来，其他会在启动时被明确拒绝 */
   profile: string
+  /** 启动端口（1024~65535）。固定端口，占用时启动会明确报错 */
+  port: number
 }
 
 /** 安装进度推送的载荷 */

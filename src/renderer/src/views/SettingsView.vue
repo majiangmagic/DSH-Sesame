@@ -12,13 +12,16 @@ import type { LocaleName } from '@/i18n'
  * ── 为什么只剩四项 ──
  * 原版这一页有九项，其中四项**对这个启动器没有对应物**，已删除：
  *   · 管理页端口 —— 原版的界面本身是本地 HTTP 服务（`http://127.0.0.1:3780/`），端口可能被占所以要能改。
- *     本应用的界面是 Electron 窗口，**没有自己的服务**；dsh 的 web 端口用 `--port 0` 由系统挑，也不该让用户填。
+ *     本应用的界面是 Electron 窗口、**没有自己的服务**，所以那一项没有对应物。
+ *     取而代之的是下面的**启动端口**：它管的是 dsh web 服务绑哪个端口。
+ *     （原来是 `--port 0` 让系统随便挑 —— 永远不会冲突，但每次地址都不一样，用户没法收藏、
+ *       也没法记住。现在固定，默认 3080；被占用时启动会明确报错，不静默换一个。）
  *   · 版本目录 —— 版本池刻意固定在应用旁边（`<app>/dsh`），这是"便携、可整份删掉重建"的前提，不该开放修改。
  *   · 兼容模式 —— 对应原版"启动失败自动禁用插件并重试"，那套逻辑没有移植，留着是空开关。
  *   · 插件市场 —— 市场是内置库（dshmarket），不是能开关的东西。
  *
- * 剩下四项里，**界面语言是立即生效的**（接到 UI store 的 locale），
- * 另外三项（自启 / 额外参数 / 启动 profile）等主进程的设置存储落地后才是真的 ——
+ * 剩下五项里，**界面语言是立即生效的**（接到 UI store 的 locale），
+ * 另外四项（自启 / 额外参数 / 启动 profile / 启动端口）等主进程的设置存储落地后才是真的 ——
  * 所以这一页挂着 `SAMPLE_DATA.settings` 的标注，界面会明确写出"仍是样例"，不假装保存成功。
  *
  * 「启动 profile」保留为下拉框是**刻意的占位**：目前只有 `web` 可用，`tui` 作为不可选项列出，
@@ -85,6 +88,16 @@ onMounted(async () => {
         </select>
       </label>
 
+      <!--
+        启动端口。固定端口的意义是"地址可预期"：能存书签、能记住。
+        被占用时**不做静默回退**（那又变回"东一个西一个"），而是由主进程明确报错。
+      -->
+      <label class="form-row">
+        <span>{{ t('settings.port') }}</span>
+        <input id="port" type="number" min="1024" max="65535" step="1" v-model.number="draft.port" />
+      </label>
+      <p class="status-line">{{ t('settings.portHint') }}</p>
+
       <label class="toggle">
         <span>{{ t('settings.autoStart') }}</span>
         <input id="autoStart" type="checkbox" v-model="draft.autoStart" />
@@ -110,15 +123,6 @@ onMounted(async () => {
         />
       </label>
       <p class="status-line">{{ t('settings.argsHint') }}</p>
-
-      <label class="form-row">
-        <span>{{ t('settings.profile') }}</span>
-        <select id="profile" v-model="draft.profile">
-          <option v-for="item in PROFILES" :key="item.value" :value="item.value" :disabled="!item.available">
-            {{ item.value }}
-          </option>
-        </select>
-      </label>
 
       <button class="main-button" id="saveSettings" type="button" style="margin-top: 22px" @click="save">
         {{ t('settings.save') }}
