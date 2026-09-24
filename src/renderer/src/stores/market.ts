@@ -308,7 +308,10 @@ export const useMarketStore = defineStore('market', () => {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       busyName.value = null
-      progressText.value = ''
+      // **不要清 progressText**：它是"上一次操作的结果"，而主进程推来的最后一行
+      // 正是结论（「dshmarket 已更新到 1.61.0」）。清掉之后用户就永远看不到
+      // 成功与否 —— 之前就是这样，点了更新只看到进度一闪，然后什么都没有。
+      // 下一次操作开始时（函数体的开头）才会清空。
     }
   }
 
@@ -332,7 +335,10 @@ export const useMarketStore = defineStore('market', () => {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       busyName.value = null
-      progressText.value = ''
+      // **不要清 progressText**：它是"上一次操作的结果"，而主进程推来的最后一行
+      // 正是结论（「dshmarket 已更新到 1.61.0」）。清掉之后用户就永远看不到
+      // 成功与否 —— 之前就是这样，点了更新只看到进度一闪，然后什么都没有。
+      // 下一次操作开始时（函数体的开头）才会清空。
     }
   }
 
@@ -357,7 +363,10 @@ export const useMarketStore = defineStore('market', () => {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       busyName.value = null
-      progressText.value = ''
+      // **不要清 progressText**：它是"上一次操作的结果"，而主进程推来的最后一行
+      // 正是结论（「dshmarket 已更新到 1.61.0」）。清掉之后用户就永远看不到
+      // 成功与否 —— 之前就是这样，点了更新只看到进度一闪，然后什么都没有。
+      // 下一次操作开始时（函数体的开头）才会清空。
     }
   }
 

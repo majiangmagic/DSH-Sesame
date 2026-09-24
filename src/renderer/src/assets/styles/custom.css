@@ -1065,3 +1065,32 @@ main,
     opacity: 0.55;
   }
 }
+
+/* ---- 市场页的提示横幅（错误 / 上一次操作的结果）----
+ *
+ * 这两个横幅**挂在列表上方，不替换列表** —— 之前错误提示和列表在同一个 v-if 链里，
+ * 更新一失败整列表就被一行字顶掉，用户看到的是"插件全没了"。
+ */
+.market-banner {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(77, 141, 255, 0.1);
+  border: 1px solid rgba(122, 166, 255, 0.28);
+  color: var(--text);
+}
+
+/* 进行中：稍暗，暗示还会有新行；结束后恢复常态，表示这是最终结果 */
+.market-banner.is-busy {
+  opacity: 0.82;
+}
+
+.market-banner.is-error {
+  background: rgba(255, 90, 110, 0.12);
+  border-color: rgba(255, 122, 138, 0.4);
+  color: #ffb3bd;
+}

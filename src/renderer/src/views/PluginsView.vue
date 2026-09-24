@@ -180,9 +180,23 @@ onMounted(() => {
         </div>
       </div>
 
+      <!--
+        错误与结果提示：**挂在列表上方，不替换列表**。
+        原先这里是 `<div v-else-if="market.error">`，和下面的列表同一个 v-if 链 ——
+        更新一失败整列表就被这行字顶掉，用户看到的是"插件全没了"，而且分不清
+        是成功还是失败。现在失败只红一条横幅，行照旧显示、还能继续操作。
+      -->
+      <div v-if="market.error" class="market-banner is-error">{{ market.error }}</div>
+      <div
+        v-else-if="market.progressText"
+        class="market-banner"
+        :class="{ 'is-busy': market.busyName !== null }"
+      >
+        {{ market.progressText }}
+      </div>
+
       <div class="module-list" id="marketList">
         <div v-if="market.loading && !market.loaded" class="module-empty">{{ t('common.loading') }}</div>
-        <div v-else-if="market.error" class="module-empty">{{ market.error }}</div>
         <div v-else-if="!market.visible.length" class="module-empty">
           <span>{{ t('market.noMatch') }}</span>
           <button class="subtle-button" type="button" @click="clearFilters">{{ t('market.clearFilters') }}</button>
