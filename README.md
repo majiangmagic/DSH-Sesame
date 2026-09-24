@@ -5,7 +5,7 @@ dsh 的桌面启动器（Electron + Vue 3 + TypeScript）：管理 dsh 版本、
 ## 构建成品
 
 ```powershell
-cd D:\agent\DSH-Sesame
+cd <项目目录>
 npm run dist && node scripts/publish-release.mjs
 ```
 
