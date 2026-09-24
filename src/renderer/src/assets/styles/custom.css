@@ -1186,3 +1186,19 @@ main,
 #pickDshHome {
   flex: 0 0 auto;
 }
+
+/* 快照页的布局：**照抄** #view-releases 那组规则（同样的"卡片内可滚动"需求），
+   不手写、不改原规则 —— 上一轮的 CSS 手写踩过坑（选择器写太宽把别的行改坏）。 */
+
+
+/* ---- 版本管理页（新增的独立标签页） ---- */
+
+/*
+ * 原版的居中规则只列了 #view-control / #view-store / #view-preferences，
+ * 新增的 #view-snapshots 要自己补一份，否则卡片会贴在左上角。
+ */
+#view-snapshots {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}

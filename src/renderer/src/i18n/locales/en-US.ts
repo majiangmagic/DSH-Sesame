@@ -8,6 +8,18 @@
  * 品牌名统一为 DSH-S。
  */
 const enUS: typeof zhCN = {
+  snap: {
+    title: "Snapshots",
+    label: "Note (optional)",
+    labelPlaceholder: "e.g. state before upgrade",
+    create: "Save one",
+    restore: "Restore",
+    files: "files",
+    empty: "No snapshots yet. Click \"Save one\" to create the first.",
+    keep: "Keeps at most 10; the oldest is pruned. A snapshot is also taken automatically before plugin install/update/toggle.",
+    created: "Snapshot saved",
+    restored: "Restored {n} files (the pre-rollback one is {backup})",
+  },
   check: {
     busy: 'Already checking — one moment…',
     pickVersion: 'Pick a version first',
@@ -66,6 +78,7 @@ const enUS: typeof zhCN = {
   },
 
   nav: {
+    snapshots: "Snapshots",
     home: 'Control',
     plugins: 'Plugins',
     log: 'Log',

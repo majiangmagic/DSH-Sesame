@@ -4,6 +4,7 @@ import LogView from '@/views/LogView.vue'
 import PluginsView from '@/views/PluginsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import VersionsView from '@/views/VersionsView.vue'
+import SnapshotsView from '@/views/SnapshotsView.vue'
 
 /**
  * 五个 tab 各是一个路由。
@@ -26,6 +27,8 @@ export const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsView },
     // DSH-Sesame 新增：版本管理独立成页（原版只有控制页顶部那几个作用于"当前版本"的按钮）
     { path: '/versions', name: 'versions', component: VersionsView },
+    // 快照：profile 的 5 个配置文件，可存可回退（放 userData，覆盖安装不会清）
+    { path: '/snapshots', name: 'snapshots', component: SnapshotsView },
     { path: '/:pathMatch(.*)*', redirect: '/home' }
   ]
 })

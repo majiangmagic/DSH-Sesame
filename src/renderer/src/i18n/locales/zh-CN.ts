@@ -6,6 +6,18 @@
  * （en-US.ts 用 `typeof zhCN` 约束，漏补会直接编译不过）。
  */
 export default {
+  snap: {
+    title: "快照",
+    label: "备注（可留空）",
+    labelPlaceholder: "例如：升级前的状态",
+    create: "存一份",
+    restore: "回退到此",
+    files: "个文件",
+    empty: "还没有快照。点「存一份」建立第一个。",
+    keep: "最多保留 10 份，超出自动删最旧的。插件安装/升级/开关之前会自动存一份。",
+    created: "已存快照",
+    restored: "已回退 {n} 个文件（回退前那份是 {backup}）",
+  },
   check: {
     button: "检查",
     busy: "正在检查，请稍候…",
@@ -63,6 +75,7 @@ export default {
   },
 
   nav: {
+    snapshots: "快照",
     home: '控制',
     plugins: '插件',
     log: '终端',
