@@ -1,6 +1,6 @@
 {
   "name": "dsh-sesame",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "DSH-Sesame —— dsh 的桌面启动器（Electron + Vue 3 + TypeScript）",
   "author": "DSH-Sesame",
