@@ -6,6 +6,20 @@
  * （en-US.ts 用 `typeof zhCN` 约束，漏补会直接编译不过）。
  */
 export default {
+  check: {
+    button: "检查",
+    running: "检查中…",
+    title: "检查结果",
+    ok: "没发现问题，这个版本能正常启动。",
+    failed: "启动失败。下面这些没能启动：",
+    timeout: "启动超时（可能卡住了）。下面这些没能启动：",
+    noPlugin: "启动失败，但 dsh 没指出具体是哪个插件。",
+    seeLog: "完整日志在 DSH_HOME/logs/ 下的 startup-*.log。",
+    disable: "关闭这些插件",
+    cancel: "取消",
+    builtin: "dsh 自带",
+    disabled: "已关闭：{names}",
+  },
   app: {
     title: 'DSH-S'
   },

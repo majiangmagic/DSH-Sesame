@@ -8,6 +8,20 @@
  * 品牌名统一为 DSH-S。
  */
 const enUS: typeof zhCN = {
+  check: {
+  button: "Check",
+  running: "Checking…",
+  title: "Check result",
+  ok: "No problems found — this version starts normally.",
+  failed: "Startup failed. These did not start:",
+  timeout: "Startup timed out (possibly stuck). These did not start:",
+  noPlugin: "Startup failed, but dsh did not name a specific plugin.",
+  seeLog: "Full log: startup-*.log under DSH_HOME/logs/.",
+  disable: "Disable these plugins",
+  cancel: "Cancel",
+  builtin: "bundled with dsh",
+  disabled: "Disabled: {names}",
+  },
   app: {
     title: 'DSH-S'
   },

@@ -5,6 +5,9 @@ import PluginPanel from '@/components/PluginPanel.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import VersionSelect, { type VersionOption } from '@/components/VersionSelect.vue'
 import { useVersionsStore } from '@/stores/versions'
+import { useUiStore } from '@/stores/ui'
+import { api } from '@/api'
+import type { DiagnosisResult } from '@shared/diagnose'
 
 /**
  * 控制页。
@@ -22,6 +25,7 @@ import { useVersionsStore } from '@/stores/versions'
  */
 const { t } = useI18n()
 const versions = useVersionsStore()
+const ui = useUiStore()
 
 const selected = ref('')
 
@@ -40,6 +44,55 @@ const options = computed<VersionOption[]>(() =>
 const isRunning = computed(() => versions.isRunning)
 
 /** 主按钮：在跑就是停止，否则是启动 */
+/**
+ * 「检查」：限时启动一次并解析 dsh 自己的失败诊断，只取 **Failed plugins** 那一段。
+ *
+ * 会**真的启动 dsh**（用完即停）—— 要抓"搞坏启动"的插件，harness 连它一起启动是唯一办法。
+ * 所以由用户显式点按钮触发，不自动跑。
+ */
+const diagnosing = ref(false)
+const diagnosis = ref<DiagnosisResult | null>(null)
+const showDiag = ref(false)
+
+/** 有问题的插件里，哪些是"你的插件"（可禁用）；dsh 自带的标出来但不给禁用 */
+const installedNames = ref<Set<string>>(new Set())
+const problems = computed(() =>
+  (diagnosis.value?.problems ?? []).map((p) => ({
+    ...p,
+    isPlugin: p.pkg !== null && installedNames.value.has(p.pkg)
+  }))
+)
+
+const disablable = computed(() => problems.value.filter((p) => p.isPlugin))
+
+async function runCheck(): Promise<void> {
+  if (diagnosing.value || selected.value === '') return
+  diagnosing.value = true
+  try {
+    // 先取已装插件清单，用来判断 dsh 报出来的名字是不是"你的插件"
+    const list = await api.getPlugins()
+    installedNames.value = new Set(list.plugins.map((p) => p.name))
+    diagnosis.value = await api.runDiagnosis(selected.value)
+    showDiag.value = true
+  } catch (cause) {
+    ui.showBubble(cause instanceof Error ? cause.message : String(cause))
+  } finally {
+    diagnosing.value = false
+  }
+}
+
+/** 一键关闭查出来的那些插件（可逆：插件页能再打开） */
+async function disableProblems(): Promise<void> {
+  const targets = disablable.value
+  if (targets.length === 0) return
+  for (const p of targets) {
+    await api.setPluginEnabled(p.pkg ?? p.id, false)
+  }
+  await versions.load()
+  showDiag.value = false
+  ui.showBubble(t('check.disabled', { names: targets.map((p) => p.pkg ?? p.id).join(', ') }))
+}
+
 function onMainAction(): void {
   if (isRunning.value) void versions.stop()
   else void versions.start(selected.value)
@@ -120,6 +173,16 @@ onMounted(async () => {
               <rect fill="currentColor" x="5" y="5" width="14" height="14" rx="2.6" />
             </svg>
           </button>
+      <!-- 检查：限时启动一次并解析 dsh 自己的失败诊断（会真的起 dsh，用完即停） -->
+      <button
+        type="button"
+        class="subtle-button"
+        id="checkPlugins"
+        :disabled="diagnosing"
+        @click="runCheck"
+      >
+        {{ diagnosing ? t('check.running') : t('check.button') }}
+      </button>
         </div>
       </div>
       <p class="status-line" id="status-line">
@@ -137,6 +200,53 @@ onMounted(async () => {
     <!-- 新增：插件开关（与插件页共用同一份数据；插件页本身保留不动） -->
     <div class="panel" id="homePlugins">
       <PluginPanel />
+    </div>
+  </div>
+
+  <!--
+    诊断结果弹窗。结构照抄 components/overlays/NoticeOverlay.vue，class 全部复用，
+    不新增 CSS —— 否则又会变成"自己发明布局"那类问题。
+    只列**有问题的插件名**（dsh 的 Failed plugins 那段）。
+  -->
+  <div v-if="showDiag && diagnosis" class="confirm-layer" id="diagLayer">
+    <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="diagTitle">
+      <h2 class="confirm-title" id="diagTitle">{{ t('check.title') }}</h2>
+
+      <template v-if="diagnosis.outcome === 'ready'">
+        <p class="banner-text">{{ t('check.ok') }}</p>
+      </template>
+
+      <template v-else-if="problems.length > 0">
+        <p class="banner-text">
+          {{ diagnosis.outcome === 'timeout' ? t('check.timeout') : t('check.failed') }}
+        </p>
+        <ul class="banner-text" id="diagProblemList">
+          <li v-for="p in problems" :key="p.id">
+            {{ p.pkg || p.id }}<template v-if="!p.isPlugin">（{{ t('check.builtin') }}）</template>
+            <template v-if="p.error"> —— {{ p.error }}</template>
+          </li>
+        </ul>
+      </template>
+
+      <template v-else>
+        <p class="banner-text">{{ t('check.noPlugin') }}</p>
+        <p class="banner-text" id="diagRawHint">{{ t('check.seeLog') }}</p>
+      </template>
+
+      <div class="confirm-actions">
+        <button
+          v-if="disablable.length > 0"
+          type="button"
+          class="main-button"
+          id="diagDisable"
+          @click="disableProblems"
+        >
+          {{ t('check.disable') }}
+        </button>
+        <button type="button" class="main-button" id="diagCancel" @click="showDiag = false">
+          {{ t('check.cancel') }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
