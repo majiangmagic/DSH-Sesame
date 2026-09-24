@@ -374,7 +374,7 @@
     rgba(217, 70, 239, 0.12) 42%,
     transparent 70%
   );
-  animation: neon-drift-a 15s ease-in-out infinite alternate;
+  animation: neon-drift-a 7s ease-in-out infinite alternate;
 }
 
 /* 左下：正紫，压住暗部 */
@@ -389,11 +389,15 @@
     rgba(124, 58, 237, 0.14) 44%,
     transparent 72%
   );
-  animation: neon-drift-b 19s ease-in-out infinite alternate;
+  animation: neon-drift-b 9s ease-in-out infinite alternate;
 }
 
 /*
  * 漂移方向：两团**互相垂直**（一团横着走、一团竖着走），不是相反方向。
+ *
+ * 速度：7s / 9s 一个单程（alternate 来回 = 14s / 18s）。最初是 15s / 19s，
+ * 用户反馈"动了，但是很慢" —— 实测约 53px/秒，确实像慢速熔岩灯；现在约 2.1 倍。
+ * 想再调：只改 .backdrop-grid-mask::before/::after 里的 animation 时长即可。
  *
  * 这是第三次修正。前两版都在调幅度和周期，但实测紫光的**重心纹丝不动**
  * （907.8,302.3 → 907.9,302.8 → 907.8,302.2，变化 <1px）：因为两团往相反方向走，
