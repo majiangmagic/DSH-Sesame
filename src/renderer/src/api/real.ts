@@ -2,6 +2,7 @@ import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@share
 import type { PluginList } from '@shared/plugins'
 import type { VersionOverview } from '@shared/versions'
 import type { DiagnosisResult } from '@shared/diagnose'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
 import type {
   InstallProgress,
   ManagerApi,
@@ -31,6 +32,10 @@ export const realApi: ManagerApi = {
    * 主进程照实回全量，需要时随时能把官方项显示回来。
    */
   runDiagnosis: (version: string): Promise<DiagnosisResult> => window.sesame.diagnose.run(version),
+  listSnapshots: (): Promise<SnapshotEntry[]> => window.sesame.snapshot.list(),
+  snapshotPaths: (): Promise<SnapshotPaths> => window.sesame.snapshot.paths(),
+  createSnapshot: (label: string): Promise<SnapshotEntry> => window.sesame.snapshot.create(label),
+  restoreSnapshot: (id: string): Promise<RestoreResult> => window.sesame.snapshot.restore(id),
 
   async getPlugins(): Promise<PluginList> {
     const list = await window.sesame.plugins.list()

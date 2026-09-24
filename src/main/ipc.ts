@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   DIAGNOSE_CHANNELS,
   LOG_CHANNELS,
+  SNAPSHOT_CHANNELS,
   MARKET_CHANNELS,
   PLUGIN_CHANNELS,
   SETTINGS_CHANNELS,
@@ -20,6 +21,16 @@ import { overview } from './versions'
 import { clearLog, logSnapshot, pushTagged } from './logbus'
 import { readSettings, writeSettings } from './settings'
 import { diagnose } from './diagnose'
+/*
+ * 注意别名：本文件第 17 行已经从 ./market 引入了同名的 listSnapshots（那是市场的快照列表，
+ * 和插件配置快照是两回事）。不加别名会 TS2300 重名报错。
+ */
+import {
+  createSnapshot,
+  listSnapshots as listPluginSnapshots,
+  restoreSnapshot,
+  snapshotPaths
+} from './snapshot'
 
 /**
  * 业务 IPC 注册。
@@ -38,6 +49,16 @@ export function registerBusinessIpc(): void {
    */
   ipcMain.handle(DIAGNOSE_CHANNELS.run, (_event: IpcMainInvokeEvent, version: string) =>
     diagnose(version, readSettings().port)
+  )
+
+  /* 插件配置快照：手动/自动存、列、回退（回退前自动先存一份当前状态） */
+  ipcMain.handle(SNAPSHOT_CHANNELS.list, () => listPluginSnapshots())
+  ipcMain.handle(SNAPSHOT_CHANNELS.paths, () => snapshotPaths())
+  ipcMain.handle(SNAPSHOT_CHANNELS.create, (_event: IpcMainInvokeEvent, label: string) =>
+    createSnapshot('manual', typeof label === 'string' ? label : '')
+  )
+  ipcMain.handle(SNAPSHOT_CHANNELS.restore, (_event: IpcMainInvokeEvent, id: string) =>
+    restoreSnapshot(id)
   )
 
   ipcMain.handle(VERSION_CHANNELS.overview, () => overview())

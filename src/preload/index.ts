@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DiagnosisResult } from '@shared/diagnose'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
 import {
   LOG_CHANNELS,
   MARKET_CHANNELS,
@@ -7,6 +8,7 @@ import {
   SETTINGS_CHANNELS,
   VERSION_CHANNELS,
   DIAGNOSE_CHANNELS,
+  SNAPSHOT_CHANNELS,
   WINDOW_CHANNELS,
   type LauncherSettingsPayload,
   type PluginProgressEvent,
@@ -141,6 +143,17 @@ const api = {
       ipcRenderer.invoke(MARKET_CHANNELS.catalog, region),
     /** 「更新自己」所需：内置版本 + 市场判定的目标 + 裸查结果 */
     selfVersion: (): Promise<MarketSelfUpdate> => ipcRenderer.invoke(MARKET_CHANNELS.selfVersion)
+  },
+
+  snapshot: {
+    /** 列出快照（新的在前） */
+    list: (): Promise<SnapshotEntry[]> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.list),
+    /** 当前 profile 的配置目录与快照根（界面显示用） */
+    paths: (): Promise<SnapshotPaths> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.paths),
+    /** 手动存一份 */
+    create: (label: string): Promise<SnapshotEntry> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.create, label),
+    /** 回退到指定快照（回退前会自动先存一份当前状态） */
+    restore: (id: string): Promise<RestoreResult> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.restore, id)
   },
 
   diagnose: {

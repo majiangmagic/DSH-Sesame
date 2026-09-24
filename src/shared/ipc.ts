@@ -120,3 +120,16 @@ export const DIAGNOSE_CHANNELS = {
 } as const
 
 export type DiagnoseChannel = (typeof DIAGNOSE_CHANNELS)[keyof typeof DIAGNOSE_CHANNELS]
+
+/**
+ * 插件配置快照。存/列/回退三件事。
+ * 快照放 <userData>/snapshots/（**不放安装目录** —— 覆盖安装会把它清空）。
+ */
+export const SNAPSHOT_CHANNELS = {
+  list: 'snapshot:list',
+  create: 'snapshot:create',
+  restore: 'snapshot:restore',
+  paths: 'snapshot:paths'
+} as const
+
+export type SnapshotChannel = (typeof SNAPSHOT_CHANNELS)[keyof typeof SNAPSHOT_CHANNELS]

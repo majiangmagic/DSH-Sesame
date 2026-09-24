@@ -2,6 +2,7 @@ import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate 
 import type { PluginEntry, PluginList, PluginReason } from '@shared/plugins'
 import type { VersionOverview, VersionStatus } from '@shared/versions'
 import type { DiagnosisResult } from '@shared/diagnose'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
 
 /**
  * 接口契约 —— 只有类型，没有实现。
@@ -86,6 +87,15 @@ export interface ManagerApi {
    * 会真的起 dsh（用完即停）。
    */
   runDiagnosis(version: string): Promise<DiagnosisResult>
+
+  /** 快照：列出（新的在前） */
+  listSnapshots(): Promise<SnapshotEntry[]>
+  /** 快照：当前 profile 的配置目录与快照根 */
+  snapshotPaths(): Promise<SnapshotPaths>
+  /** 快照：手动存一份 */
+  createSnapshot(label: string): Promise<SnapshotEntry>
+  /** 快照：回退（回退前自动先存一份当前状态） */
+  restoreSnapshot(id: string): Promise<RestoreResult>
 
   getPlugins(): Promise<PluginList>
 
