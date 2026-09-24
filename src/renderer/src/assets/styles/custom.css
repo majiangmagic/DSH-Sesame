@@ -1151,3 +1151,31 @@ main,
     transform: translateX(-50%) translateY(0);
   }
 }
+
+/*
+ * 数据目录那一行：整行宽输入框 + 并排的「浏览…」按钮。
+ *
+ * components.css 里这套样式的作用域是 `.extra-options`（「额外启动参数」那个容器），
+ * 数据目录字段不在其中，所以一开始既没拿到 width:100%，也没拿到 flex 并排布局 ——
+ * 表现为输入框被挤得很窄、占位文字显示不全。
+ * 这里照它的意图补一份（原版规则不动），顺便给按钮加上不被压缩的约束。
+ */
+.preferences .form-row.wide input {
+  width: 100%;
+  text-align: left;
+}
+
+.preferences .form-row.wide .inline-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preferences .form-row.wide .inline-input input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#pickDshHome {
+  flex: 0 0 auto;
+}
