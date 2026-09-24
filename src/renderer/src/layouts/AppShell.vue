@@ -30,6 +30,8 @@ const TABS: Array<{ path: string; label: string }> = [
   { path: '/versions', label: 'nav.versions' },
   { path: '/plugins', label: 'nav.plugins' },
   { path: '/log', label: 'nav.log' },
+  { path: '/snapshots', label: 'nav.snapshots' },
+
   { path: '/settings', label: 'nav.settings' }
 ]
 
