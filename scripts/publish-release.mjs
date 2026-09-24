@@ -3,8 +3,8 @@
  *
  * 目录布局（D:\agent 下这个项目只有一个目录）：
  *   D:\agent\DSH-Sesame-release\           ← 成品目录
- *       DSH-Sesame-Setup-0.1.0.exe         ← 安装包（发布脚本从 _stage 提上来）
- *       DSH-Sesame-0.1.0-portable.exe
+ *       DSH-Sesame-Setup-0.1.0.exe.blockmap
+ *       latest.yml
  *       _stage\                             ← 打包暂存，发布完成后被删除
  *
  * 为什么 electron-builder 不直接输出到顶层：构建中途失败会在那儿留下看起来正常的
