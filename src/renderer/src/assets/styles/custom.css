@@ -1160,11 +1160,16 @@ main,
  * 表现为输入框被挤得很窄、占位文字显示不全。
  * 这里照它的意图补一份（原版规则不动），顺便给按钮加上不被压缩的约束。
  */
-.preferences .form-row.wide input {
-  width: 100%;
-  text-align: left;
-}
-
+/*
+ * 只作用于数据目录那一行。
+ *
+ * 这里原来还写过一条 `.preferences .form-row.wide input { width: 100% }` —— 它不只匹配
+ * 数据目录，也匹配「额外启动参数」那行的 input（同样在 .preferences 下、同样是 .form-row.wide），
+ * 于是把那个输入框撑成整行宽、把同行的标签挤成一字一行，还溢出了面板。
+ *
+ * 教训：给新加的元素写样式，选择器要**限定到那个元素**（.inline-input 是数据目录独有的），
+ * 不要按"看起来差不多的形状"去写通配规则。
+ */
 .preferences .form-row.wide .inline-input {
   display: flex;
   align-items: center;
@@ -1174,6 +1179,8 @@ main,
 .preferences .form-row.wide .inline-input input {
   flex: 1 1 auto;
   min-width: 0;
+  width: 100%;
+  text-align: left;
 }
 
 #pickDshHome {
