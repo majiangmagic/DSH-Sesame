@@ -1,8 +1,8 @@
 /**
  * 发布：把 electron-builder 的产物提到发布目录的**顶层**。
  *
- * 目录布局（D:\agent 下这个项目只有一个目录）：
- *   D:\agent\DSH-Sesame-release\           ← 成品目录
+ * 目录布局（成品目录与本项目**平级**）：
+ *   <本项目>\..\DSH-Sesame-release\           ← 成品目录
  *       DSH-Sesame-Setup-0.1.0.exe
  *       DSH-Sesame-Setup-0.1.0.exe.blockmap
  *       latest.yml
