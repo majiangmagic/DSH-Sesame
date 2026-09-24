@@ -470,19 +470,6 @@ body::after {
   }
 }
 
-/*
- * 动效敏感的用户：**关掉全部霓虹动画**，静态显示同样的配色。
- * 这类用户对缓慢漂移/呼吸也会不适，所以不是"降速"而是"全停"。
- */
-@media (prefers-reduced-motion: reduce) {
-  .stage::before,
-  .stage::after,
-  .backdrop-grid-mask::before,
-  .backdrop-grid-mask::after {
-    animation: none;
-  }
-}
-
 /* 卡片描边从"蓝灰"改成"蓝紫"，让它看起来是被霓虹照亮而不是灰框 */
 .panel {
   border-color: rgba(150, 140, 255, 0.16);
@@ -895,3 +882,20 @@ main,
 .stage::after {
   display: none;
 }
+
+/* ---- 关于 prefers-reduced-motion（刻意不设抑制）----
+ *
+ * 这里**没有** `@media (prefers-reduced-motion: reduce)` 的抑制规则，是刻意的：
+ * Windows 关掉「辅助功能 → 视觉效果 → 动画效果」时（SPI_GETCLIENTAREAANIMATION = 假），
+ * Chromium 会报 reduce=true —— 若在此处停掉动画，那类机器上**两团漂移的霓虹永远不动**，
+ * 用户看不到这个效果，会以为坏了。本项目的取舍是：背景霓虹始终缓慢漂移。
+ *
+ * 另外，真正会渲染的动画只有 .backdrop-grid-mask::before / ::after 这两团漂移 ——
+ * .stage::before（呼吸）与 .stage::after（星点）被上面的 display: none 关着，不参与渲染。
+ *
+ * 若将来要改回"尊重系统设置、全部静止"，加回这段即可：
+ *   @media (prefers-reduced-motion: reduce) {
+ *     .backdrop-grid-mask::before,
+ *     .backdrop-grid-mask::after { animation: none; }
+ *   }
+ */
