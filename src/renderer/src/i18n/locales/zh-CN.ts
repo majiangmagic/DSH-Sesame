@@ -169,7 +169,6 @@ export default {
     uiLang: '界面语言',
     args: '额外启动参数',
     argsPlaceholder: '例如：--log-level debug',
-    argsHint: '追加到 dsh 命令行末尾（空格分词，含空格的值用引号包起来）。已装的插件、数据不受影响。',
     dataDir: '版本目录',
     browse: '浏览…',
     save: '保存',

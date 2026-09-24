@@ -170,8 +170,6 @@ const enUS: typeof zhCN = {
     uiLang: 'Interface language',
     args: 'Extra startup arguments',
     argsPlaceholder: 'e.g. --log-level debug',
-    argsHint:
-      'Appended to the end of the dsh command line (split on spaces; quote values with spaces). Installed plugins and data are unaffected.',
     dataDir: 'Version directory',
     browse: 'Browse…',
     save: 'Save',

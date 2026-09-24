@@ -153,7 +153,6 @@ onMounted(async () => {
           v-model="draft.args"
         />
       </label>
-      <p class="status-line">{{ t('settings.argsHint') }}</p>
 
       <button class="main-button" id="saveSettings" type="button" style="margin-top: 22px" @click="save">
         {{ t('settings.save') }}
