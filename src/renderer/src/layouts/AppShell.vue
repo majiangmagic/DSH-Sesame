@@ -56,8 +56,14 @@ void api.getSettings().then((s) => {
 
 watch(
   () => versions.running?.url ?? '',
-  (url) => {
-    if (url === '' || url === noticedUrl || configuredPort.value === null) return
+  async (url) => {
+    if (url === '' || url === noticedUrl) return
+    /*
+     * **每次都重新读设置**：端口是可以在设置页改的配置，不能像原先那样只在应用启动时
+     * 读一次 —— 那样用户改完之后这里还拿着旧值，会拿旧端口和真实地址比，报出假警报。
+     * （实测：3080 → 30801 后仍弹"端口 3080 已被占用，改至 30801 启动"。）
+     */
+    configuredPort.value = (await api.getSettings()).port
     let actual = 0
     try {
       actual = Number(new URL(url).port)
