@@ -7,8 +7,8 @@ import { useVersionsStore } from '@/stores/versions'
 /**
  * 更新询问弹窗（原版 `#ask`）。
  *
- * 装配方式与原版一致：`askRow()` 造出 `.ask-item`（含 what / risk / notes），**动作按钮不进**
- * 条目，而是统一塞到底栏 `.ask-actions` 里和「暂不更新」并排（原脚本 1982 行的注释写明了）。
+ * 装配方式与原版一致：`askRow()` 造出 `.confirm-item`（含 what / risk / notes），**动作按钮不进**
+ * 条目，而是统一塞到底栏 `.confirm-actions` 里和「暂不更新」并排（原脚本 1982 行的注释写明了）。
  *
  * 数据现在来自真实的版本 store：远端"最新"（跨 tag 取 semver 最高）存在且尚未安装时才弹。
  * 更新内容（原版 `renderNotes`）需要 changelog 接口，还没进契约，先渲染一句说明。
@@ -34,21 +34,21 @@ onMounted(() => {
 
 <template>
   <div class="ask" id="ask">
-    <div class="ask-card" role="dialog" aria-modal="true" aria-labelledby="askTitle">
-      <h2 class="ask-title" id="askTitle">{{ t('modal.updateAvailable') }}</h2>
-      <div class="ask-items" id="askItems">
-        <div v-if="pending" class="ask-item">
-          <div class="ask-what">
-            <div class="ask-name">{{ t('ask.dshItself') }}</div>
-            <div class="ask-ver">{{ pending.from }} → <b>{{ pending.to }}</b></div>
+    <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+      <h2 class="confirm-title" id="askTitle">{{ t('modal.updateAvailable') }}</h2>
+      <div class="confirm-items" id="askItems">
+        <div v-if="pending" class="confirm-item">
+          <div class="confirm-target">
+            <div class="confirm-name">{{ t('ask.dshItself') }}</div>
+            <div class="confirm-version">{{ pending.from }} → <b>{{ pending.to }}</b></div>
           </div>
-          <p class="ask-risk">{{ t('ask.risk') }}</p>
-          <div class="ask-notes">{{ t('ask.notesUnavailable') }}</div>
+          <p class="confirm-risk">{{ t('ask.risk') }}</p>
+          <div class="confirm-notes">{{ t('ask.notesUnavailable') }}</div>
         </div>
       </div>
-      <p class="ask-note" id="askNote" hidden></p>
+      <p class="confirm-note" id="askNote" hidden></p>
       <ProgressBar :visible="busy" :percent="null" />
-      <div class="ask-actions" id="askActions">
+      <div class="confirm-actions" id="askActions">
         <button v-if="pending" type="button" class="primary" :disabled="busy" @click="versions.update()">
           {{ t('ask.updateTo', { latest: pending.to }) }}
         </button>

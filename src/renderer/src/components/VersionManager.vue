@@ -73,10 +73,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="plugin-head">
+  <div class="module-head">
     <div>
-      <div class="plugin-title">{{ t('versions.title') }}</div>
-      <div class="plugin-sub" id="versionSub">{{ subtitle }}</div>
+      <div class="module-title">{{ t('versions.title') }}</div>
+      <div class="module-sub" id="versionSub">{{ subtitle }}</div>
     </div>
     <button
       class="ghost"
@@ -89,9 +89,9 @@ onMounted(() => {
     </button>
   </div>
 
-  <div class="plugin-list" id="versionList">
-    <div v-if="store.loading" class="plugin-empty">{{ t('common.loading') }}</div>
-    <div v-else-if="!rows.length" class="plugin-empty">{{ t('versions.noRemote') }}</div>
+  <div class="module-list" id="versionList">
+    <div v-if="store.loading" class="module-empty">{{ t('common.loading') }}</div>
+    <div v-else-if="!rows.length" class="module-empty">{{ t('versions.noRemote') }}</div>
     <div v-for="row in rows" v-else :key="row.version" class="version-row" :data-version="row.version">
       <span class="version-main">
         <span class="version-name">

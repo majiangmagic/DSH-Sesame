@@ -7,7 +7,7 @@ import { useUiStore } from '@/stores/ui'
 import type { LocaleName } from '@/i18n'
 
 /**
- * 设置页（原版 `#page-settings`）。
+ * 设置页（原版 `#view-preferences`）。
  *
  * ── 为什么只剩四项 ──
  * 原版这一页有九项，其中四项**对这个启动器没有对应物**，已删除：
@@ -70,7 +70,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div id="page-settings" class="page active">
+  <div id="view-preferences" class="page active">
     <div class="card settings" v-if="draft">
       <div class="settings-head">
         <SampleTag v-if="SAMPLE_DATA.settings" />

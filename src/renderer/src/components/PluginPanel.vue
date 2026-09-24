@@ -33,21 +33,21 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="plugin-head">
+  <div class="module-head">
     <div>
-      <div class="plugin-title">
+      <div class="module-title">
         {{ t('plugins.title') }}
         <SampleTag v-if="SAMPLE_DATA.plugins" />
       </div>
-      <div class="plugin-sub" id="pluginSub">{{ subtitle }}</div>
+      <div class="module-sub" id="pluginSub">{{ subtitle }}</div>
     </div>
     <button class="ghost" id="pluginRefresh" type="button" :disabled="store.loading" @click="store.load()">
       {{ t('plugins.refresh') }}
     </button>
   </div>
-  <div class="plugin-list" id="pluginList">
-    <div v-if="store.loading" class="plugin-empty">{{ t('common.loading') }}</div>
-    <div v-else-if="!store.plugins.length" class="plugin-empty">{{ t('plugins.empty') }}</div>
+  <div class="module-list" id="pluginList">
+    <div v-if="store.loading" class="module-empty">{{ t('common.loading') }}</div>
+    <div v-else-if="!store.plugins.length" class="module-empty">{{ t('plugins.empty') }}</div>
     <PluginRow
       v-for="plugin in store.plugins"
       :key="plugin.name"

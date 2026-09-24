@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { api } from '@/api'
 
 /**
- * 终端页（原版 `#page-log`）。
+ * 终端页（原版 `#view-console`）。
  *
  * **真实数据**：来源是主进程的日志环形缓冲（`src/main/logbus.ts`），内容是
  *   1. dsh 子进程的 stdout/stderr —— 启动、就绪地址、插件加载报错、退出码；
@@ -51,8 +51,8 @@ onBeforeUnmount(() => off?.())
 </script>
 
 <template>
-  <div id="page-log" class="page active">
-    <div class="logbar">
+  <div id="view-console" class="page active">
+    <div class="log-toolbar">
       <button type="button" id="clear" @click="clear">{{ t('log.clear') }}</button>
     </div>
     <pre id="log" ref="preEl">{{ lines.join('\n') }}</pre>

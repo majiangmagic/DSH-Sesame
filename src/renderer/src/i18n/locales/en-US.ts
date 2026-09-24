@@ -85,7 +85,7 @@ const enUS: typeof zhCN = {
     /**
      * Why a plugin cannot be toggled.
      *
-     * Two strings per reason: the short one goes into `.plugin-meta` (it shares a single line
+     * Two strings per reason: the short one goes into `.module-meta` (it shares a single line
      * with the version and row ids, so it must stay short); the `*Why` one becomes the row's
      * `title` and explains the real reason where there is room to be clear.
      */

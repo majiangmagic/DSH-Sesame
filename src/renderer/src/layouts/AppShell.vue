@@ -10,7 +10,7 @@ import WinControls from '@/components/WinControls.vue'
  * 三处与原版脚本等价、但必须重写的交互：
  *  1. tab 切换：原版靠 `data-tab` + 显示/隐藏 `.page`，这里交给 vue-router；
  *  2. 胶囊指示器：原版把 `--tab-x` / `--tab-width` 写到 nav 上，让 `nav::before` 滑过去；
- *  3. 页面进入动画：原版按 tab 顺序给 `.page` 加 `tab-enter-forward` / `tab-enter-backward`。
+ *  3. 页面进入动画：原版按 tab 顺序给 `.page` 加 `view-enter-next` / `view-enter-prev`。
  */
 const { t } = useI18n()
 const route = useRoute()
@@ -53,7 +53,7 @@ watch(
   async (path) => {
     const index = TABS.findIndex((tab) => tab.path === path)
     if (index >= 0 && index !== lastIndex) {
-      transitionClass.value = index > lastIndex ? 'tab-enter-forward' : 'tab-enter-backward'
+      transitionClass.value = index > lastIndex ? 'view-enter-next' : 'view-enter-prev'
       lastIndex = index
     }
     await nextTick()
@@ -77,14 +77,14 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
 
 <template>
   <header>
-    <div class="brand-block">
-      <div class="brand">{{ t('app.title') }}</div>
-      <span class="app-ver" id="appVer">{{ version }}</span>
-      <button type="button" class="self-update" id="selfUpdate" :hidden="!hasLauncherUpdate">
+    <div class="logo-block">
+      <div class="logo">{{ t('app.title') }}</div>
+      <span class="app-version" id="appVer">{{ version }}</span>
+      <button type="button" class="self-upgrade" id="selfUpdate" :hidden="!hasLauncherUpdate">
         {{ t('home.actionUpdate') }}
       </button>
     </div>
-    <div class="header-right">
+    <div class="header-actions">
       <nav ref="navEl">
         <button
           v-for="tab in TABS"

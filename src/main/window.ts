@@ -17,7 +17,7 @@ function isSafeExternal(url: string): boolean {
  * 无边框主窗口。
  *
  * 无边框窗口的常规做法：原生标题栏去掉，最小化/最大化/关闭由页面里的
- * `.win-controls` 接管，所以这里 `frame: false` + 一条 IPC 通道把三个动作送回来。
+ * `.titlebar-buttons` 接管，所以这里 `frame: false` + 一条 IPC 通道把三个动作送回来。
  */
 export function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({

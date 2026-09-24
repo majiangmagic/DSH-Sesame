@@ -26,10 +26,10 @@ function close(): void {
 </script>
 
 <template>
-  <div class="win-controls">
+  <div class="titlebar-buttons">
     <button
       type="button"
-      class="win-btn"
+      class="titlebar-button"
       id="winMin"
       :title="t('window.minimize')"
       :aria-label="t('window.minimize')"
@@ -41,7 +41,7 @@ function close(): void {
     </button>
     <button
       type="button"
-      class="win-btn"
+      class="titlebar-button"
       id="winMax"
       :title="t('window.maximize')"
       :aria-label="t('window.maximize')"
@@ -53,7 +53,7 @@ function close(): void {
     </button>
     <button
       type="button"
-      class="win-btn close"
+      class="titlebar-button close"
       id="winClose"
       :title="t('window.close')"
       :aria-label="t('window.close')"

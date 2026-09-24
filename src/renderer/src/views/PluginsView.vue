@@ -108,12 +108,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div id="page-plugins" class="page active">
+  <div id="view-store" class="page active">
     <div class="card plugins market">
-      <div class="plugin-head">
+      <div class="module-head">
         <div>
-          <div class="plugin-title">{{ t('market.title') }}</div>
-          <div class="plugin-sub" id="marketSub">{{ subtitle }}</div>
+          <div class="module-title">{{ t('market.title') }}</div>
+          <div class="module-sub" id="marketSub">{{ subtitle }}</div>
         </div>
         <button
           class="ghost"
@@ -168,10 +168,10 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="plugin-list" id="marketList">
-        <div v-if="market.loading && !market.loaded" class="plugin-empty">{{ t('common.loading') }}</div>
-        <div v-else-if="market.error" class="plugin-empty">{{ market.error }}</div>
-        <div v-else-if="!market.visible.length" class="plugin-empty">
+      <div class="module-list" id="marketList">
+        <div v-if="market.loading && !market.loaded" class="module-empty">{{ t('common.loading') }}</div>
+        <div v-else-if="market.error" class="module-empty">{{ market.error }}</div>
+        <div v-else-if="!market.visible.length" class="module-empty">
           <span>{{ t('market.noMatch') }}</span>
           <button class="ghost" type="button" @click="clearFilters">{{ t('market.clearFilters') }}</button>
         </div>

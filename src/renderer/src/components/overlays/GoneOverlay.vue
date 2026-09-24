@@ -15,8 +15,8 @@ const emit = defineEmits<{ close: [] }>()
 <template>
   <div class="gone" id="gone">
     <div>
-      <div class="gone-title">{{ t('gone.title') }}</div>
-      <p class="gone-sub">{{ t('gone.sub') }}</p>
+      <div class="empty-title">{{ t('gone.title') }}</div>
+      <p class="empty-sub">{{ t('gone.sub') }}</p>
       <button type="button" class="ghost" id="goneClose" @click="emit('close')">
         {{ t('gone.close') }}
       </button>

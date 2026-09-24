@@ -12,7 +12,7 @@ import { useVersionsStore } from '@/stores/versions'
  * 与原版的差别（本次新增需求）：
  *   1. 顶部版本下拉**只列已安装的版本** —— 原版列的是「远端全部版本 + 最新/已装徽标」；
  *   2. 下方新增「插件开关」卡片（与插件页共用同一份数据；插件页本身保留不动）；
- *   3. 页面根节点加了 `home-stack`，让 #page-home 从"居中单卡"变成"顶部纵向卡片流"，
+ *   3. 页面根节点加了 `home-stack`，让 #view-control 从"居中单卡"变成"顶部纵向卡片流"，
  *      否则两张卡片会叠在一起。样式在 assets/styles/custom.css；
  *   4. **动作按钮只留主按钮（启动 / 停止）**。原版这里有四个（更新 / 重启 / 卸载 / 启动），
  *      现在"更新"和"卸载"都归到「版本」页 —— 那里本来就是逐版本的下载与卸载。
@@ -82,10 +82,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div id="page-home" class="page active home-stack">
+  <div id="view-control" class="page active home-stack">
     <div class="card home">
-      <div class="home-bar">
-        <div class="home-main">
+      <div class="control-bar">
+        <div class="control-main">
           <label for="versionTrigger">{{ t('home.versionLabel') }}</label>
           <VersionSelect
             v-model="selected"
@@ -100,7 +100,7 @@ onMounted(async () => {
             更新与卸载归到「版本」页（那里逐版本操作），重启可用「停止 → 启动」代替。
           -->
           <button
-            class="icon-btn"
+            class="action-button"
             :class="[isRunning ? 'stop' : 'play', { loading: mainLoading }]"
             id="main"
             type="button"
@@ -110,13 +110,13 @@ onMounted(async () => {
             @click="onMainAction"
           >
             <span class="spin" aria-hidden="true"></span>
-            <svg class="ico ico-play" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="ico action-icon-play" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 fill="currentColor"
                 d="M7 5.9v12.2c0 .74.81 1.2 1.45.82l9.9-6.1a.96.96 0 0 0 0-1.64l-9.9-6.1A.96.96 0 0 0 7 5.9Z"
               />
             </svg>
-            <svg class="ico ico-stop" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="ico action-icon-stop" viewBox="0 0 24 24" aria-hidden="true">
               <rect fill="currentColor" x="5" y="5" width="14" height="14" rx="2.6" />
             </svg>
           </button>

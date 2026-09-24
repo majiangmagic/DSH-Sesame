@@ -54,7 +54,7 @@ const triggerText = computed(() => {
 
 function scrollActiveIntoView(): void {
   void nextTick(() => {
-    panelEl.value?.querySelector('.select-option.active')?.scrollIntoView({ block: 'nearest' })
+    panelEl.value?.querySelector('.picker-option.active')?.scrollIntoView({ block: 'nearest' })
   })
 }
 
@@ -148,7 +148,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown)
   <div class="select" id="versionPicker" ref="rootEl" :class="{ open }">
     <button
       type="button"
-      class="select-trigger"
+      class="picker-trigger"
       id="versionTrigger"
       aria-haspopup="listbox"
       :aria-expanded="open"
@@ -156,16 +156,16 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown)
       @click="togglePanel"
       @keydown="onKeydown"
     >
-      <span class="select-value" id="versionValue">{{ triggerText }}</span>
-      <svg class="select-caret" viewBox="0 0 12 8" aria-hidden="true">
+      <span class="picker-value" id="versionValue">{{ triggerText }}</span>
+      <svg class="picker-caret" viewBox="0 0 12 8" aria-hidden="true">
         <path fill="currentColor" d="M0 0h12L6 8z" />
       </svg>
     </button>
-    <div class="select-panel" id="versionPanel" role="listbox" ref="panelEl" :hidden="!open">
+    <div class="picker-panel" id="versionPanel" role="listbox" ref="panelEl" :hidden="!open">
       <div
         v-for="(option, index) in options"
         :key="`${option.value}-${index}`"
-        class="select-option"
+        class="picker-option"
         :class="{
           selected: option.value === modelValue,
           more: option.more,
@@ -177,8 +177,8 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown)
         @click="choose(index)"
         @mouseenter="active = index"
       >
-        <span class="opt-name">{{ option.text }}</span>
-        <span v-if="option.badge" class="opt-badge">{{ option.badge }}</span>
+        <span class="picker-option-name">{{ option.text }}</span>
+        <span v-if="option.badge" class="picker-option-badge">{{ option.badge }}</span>
       </div>
     </div>
   </div>

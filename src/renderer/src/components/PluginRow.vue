@@ -8,7 +8,7 @@ import type { PluginEntry, PluginReason } from '@/api'
  *
  * 结构要点：整行本身是个 `<label class="toggle">`，右侧的 checkbox 就是原生的开关；
  * 不可开关时给 checkbox 加 disabled、并在 meta 里说明原因。禁用状态给整行加 `off` 类，
- * 让名字与 meta 变灰（`.plugin-row.off`）。
+ * 让名字与 meta 变灰（`.module-row.off`）。
  */
 const props = withDefaults(
   defineProps<{
@@ -32,7 +32,7 @@ const REASON_KEY: Record<Exclude<PluginReason, ''>, string> = {
 /**
  * 「为什么不能关」的长文案，挂整行的 `title`。
  *
- * 行内那行 `.plugin-meta` 还要放版本号、行 id、禁用状态，塞不下解释；所以短原因留在行里，
+ * 行内那行 `.module-meta` 还要放版本号、行 id、禁用状态，塞不下解释；所以短原因留在行里，
  * 完整理由放悬浮 —— 这样"不支持关闭"是个可追问的结论，而不是一句没有出处的断言。
  */
 const REASON_WHY_KEY: Record<Exclude<PluginReason, ''>, string> = {
@@ -73,13 +73,13 @@ function onToggle(event: Event): void {
 
 <template>
   <label
-    class="toggle plugin-row"
+    class="toggle module-row"
     :class="{ off: !plugin.enabled }"
     :title="title"
   >
-    <span class="plugin-main">
-      <span class="plugin-name">{{ plugin.name }}</span>
-      <span class="plugin-meta">{{ meta }}</span>
+    <span class="module-main">
+      <span class="module-name">{{ plugin.name }}</span>
+      <span class="module-meta">{{ meta }}</span>
     </span>
     <input
       type="checkbox"

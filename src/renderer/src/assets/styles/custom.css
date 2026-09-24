@@ -12,13 +12,13 @@
 /* ---- 控制页改成纵向卡片流 ---- */
 
 /*
- * 原版控制页只有一张卡片，靠 #page-home 的 align/justify: center 居中。
+ * 原版控制页只有一张卡片，靠 #view-control 的 align/justify: center 居中。
  * 现在它下面多了「插件开关」和「版本管理」两块，必须改成从顶部开始的纵向滚动流。
  *
- * 选择器带 id 是必要的：#page-home { align-items/justify-content } 的特异性是 (1,0,0)，
+ * 选择器带 id 是必要的：#view-control { align-items/justify-content } 的特异性是 (1,0,0)，
  * 单纯加一个 class 压不过它。
  */
-#page-home.home-stack {
+#view-control.home-stack {
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
@@ -27,24 +27,24 @@
 }
 
 /* 三张卡片同宽并居中；比原版单卡（640）略宽，给版本行放得下版本号 + 按钮 */
-#page-home.home-stack > .card {
+#view-control.home-stack > .card {
   width: min(720px, 100%);
   margin: 0 auto;
   flex: 0 0 auto;
 }
 
 /* 卡片内的列表不再受 .card.plugins 的 max-height 约束（首页用的是普通 .card） */
-#page-home .plugin-list {
+#view-control .module-list {
   max-height: none;
 }
 
 /* ---- 版本管理页（新增的独立标签页） ---- */
 
 /*
- * 原版的居中规则只列了 #page-home / #page-plugins / #page-settings，
- * 新增的 #page-versions 要自己补一份，否则卡片会贴在左上角。
+ * 原版的居中规则只列了 #view-control / #view-store / #view-preferences，
+ * 新增的 #view-releases 要自己补一份，否则卡片会贴在左上角。
  */
-#page-versions {
+#view-releases {
   align-items: center;
   justify-content: center;
   padding: 24px;
@@ -152,15 +152,15 @@
 
 /* ---- 「样例数据」标注的位置微调 ---- */
 
-/* 日志页的 .logbar 是右对齐的，标注要靠左，跟清空按钮分开 */
-.logbar .tag {
+/* 日志页的 .log-toolbar 是右对齐的，标注要靠左，跟清空按钮分开 */
+.log-toolbar .tag {
   margin-right: auto;
   margin-left: 0;
 }
 
 /* ---- 插件市场 ---- */
 
-/* 搜索框 + 分类条：市场页在 .plugin-head 下面多一层工具栏 */
+/* 搜索框 + 分类条：市场页在 .module-head 下面多一层工具栏 */
 .market-tools {
   display: flex;
   flex-direction: column;
@@ -277,7 +277,7 @@
 }
 
 /* 「没有匹配」那一格是纵向的（一句提示 + 一个清空按钮） */
-.plugin-empty .ghost {
+.module-empty .ghost {
   margin-top: 10px;
 }
 
@@ -723,30 +723,30 @@ select {
  * 注意 `color: #fff` 那些**不要动** —— 它们多半是强调色按钮上的前景色，暗色下本来就对。
  */
 
-/* ---- 自绘下拉（.select-trigger / -panel / -option）---- */
-.select-trigger {
+/* ---- 自绘下拉（.picker-trigger / -panel / -option）---- */
+.picker-trigger {
   background: rgba(13, 20, 36, 0.92);
 }
-.select-trigger:hover:not(:disabled) {
+.picker-trigger:hover:not(:disabled) {
   background: rgba(22, 32, 52, 0.95);
   border-color: rgba(122, 166, 255, 0.45);
 }
-.select.open .select-trigger {
+.select.open .picker-trigger {
   background: rgba(13, 20, 36, 0.98);
 }
-.select-panel {
+.picker-panel {
   background: rgba(9, 14, 26, 0.98);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
-.select-option.active {
+.picker-option.active {
   background: rgba(77, 141, 255, 0.14);
 }
-.select-option.selected {
+.picker-option.selected {
   background: rgba(77, 141, 255, 0.2);
 }
-.select-option.selected .opt-badge {
+.picker-option.selected .picker-option-badge {
   border-color: rgba(122, 166, 255, 0.45);
 }
 

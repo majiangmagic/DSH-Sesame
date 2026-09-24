@@ -15,10 +15,10 @@ const emit = defineEmits<{ close: [] }>()
 
 <template>
   <div class="ask" id="notice">
-    <div class="ask-card" role="alertdialog" aria-modal="true" aria-labelledby="noticeTitle">
-      <h2 class="ask-title" id="noticeTitle">{{ t('modal.actionFailed') }}</h2>
-      <p class="notice-text" id="noticeText">{{ text }}</p>
-      <div class="ask-actions">
+    <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="noticeTitle">
+      <h2 class="confirm-title" id="noticeTitle">{{ t('modal.actionFailed') }}</h2>
+      <p class="banner-text" id="noticeText">{{ text }}</p>
+      <div class="confirm-actions">
         <button type="button" class="primary" id="noticeOk" @click="emit('close')">
           {{ t('modal.ok') }}
         </button>
