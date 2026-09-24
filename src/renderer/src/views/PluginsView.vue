@@ -72,7 +72,15 @@ function openLink(url: string): void {
 
 /** 分类切换后把选中的那颗滚进视野 —— 分类条是横向滚动的，靠后的分类点不到也看不见 */
 function pickCategory(name: string, event: MouseEvent): void {
-  market.setCategory(name)
+  /*
+   * 点**已选中**的分类 = 取消它（等同于点「全部」）。
+   *
+   * 原来是直接 `setCategory(name)` —— 只会"设"不会"清"：选中一个分类之后就没办法
+   * 取消，只能换成另一个、或者去点「全部」。而旁边的「已装」是
+   * `setOnlyInstalled(!…)`，能直接点掉 —— 两者行为不一致，会被当成坏掉。
+   * 传 `''`（「全部」那颗 chip）时这个表达式仍然得到 `''`，行为不变。
+   */
+  market.setCategory(market.category === name ? '' : name)
   ;(event.currentTarget as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
 }
 
