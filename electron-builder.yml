@@ -7,9 +7,10 @@ directories:
   # 现在统一在 resources/（运行时要打进包，打包时也够用）。
   buildResources: resources
   # 打包暂存写在**成品目录内部**的 _stage 子目录，发布脚本校验后把安装包提到上层并删掉它。
-  # 这样 D:\agent 下本项目只有一个目录，而"构建失败不留半成品"的属性也保住了
+  # 这样成品目录与本项目**平级**（同级），而"构建失败不留半成品"的属性也保住了
   # （失败只会留下一个明显的临时子目录，上层安装包不受影响）。见 scripts/publish-release.mjs。
-  output: D:/agent/DSH-Sesame-release/_stage
+  # 相对**项目目录**的路径（不是绝对路径）—— 换机器、换目录都能用。
+  output: ../DSH-Sesame-release/_stage
 
 # 只打进编译产物与运行时资源，源码与配置不进包
 files:

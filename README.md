@@ -9,7 +9,7 @@ cd D:\agent\DSH-Sesame
 npm run dist && node scripts/publish-release.mjs
 ```
 
-等价于 `npm run release`。成品落在 `D:\agent\DSH-Sesame-release\`：
+等价于 `npm run release`。成品落在**与本项目平级的** `DSH-Sesame-release\`（用环境变量 `SESAME_RELEASE_DIR` 可改到别处）：
 `DSH-Sesame-Setup-<版本>.exe` 及其 `.blockmap`、`latest.yml`（后两者由 electron-builder 自动生成）。
 
 **为什么分两步**：electron-builder 先写进 `_stage\`，`publish-release.mjs` 确认构建完整（安装包非空）才提到顶层 —— 这样失败的构建不会在发布目录里留下看起来正常的半成品。
@@ -21,7 +21,7 @@ npm run dist && node scripts/publish-release.mjs
 | `npm run dev` | 开发模式（Vite HMR + Electron） |
 | `npm run build` | 只编译到 `compiled/`（main / preload / renderer） |
 | `npm run typecheck` | tsc（主进程）+ vue-tsc（渲染层） |
-| `npm run pack` | 只出免安装目录 `_stage\win-unpacked` |
+| `npm run pack` | 只出免安装目录 `<发布目录>\_stage\win-unpacked` |
 | `npm run dist` | 出安装包到 `_stage\`（不发布） |
 | `npm run release` | = `dist` + 把产物提到顶层 |
 | `npm run check:market` | 检查内置市场库（dshmarket）被依赖的内部 API 是否还在 |
@@ -31,7 +31,7 @@ npm run dist && node scripts/publish-release.mjs
 1. **npm 11 默认拦截生命周期脚本**，Electron 的二进制不会下载。若 `node_modules/electron/dist/electron.exe` 不存在，执行 `npm approve-scripts electron` 后 `npm rebuild electron`（esbuild 同理）。
 2. **国内网络**：electron 与 electron-builder 的二进制走 `.npmrc` 里配置的 npmmirror 镜像。换机器后若下载 NSIS 失败，设置环境变量：
    `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`
-3. **双击安装包没反应，先看 C 盘空间**。安装包是自解压程序，运行时要往 `%TEMP%`（默认在 C 盘）解出约 300 MB。空间不足的表现是**双击毫无反应、退出码非 0、解包目录里始终没有主程序**，而此时 `_stage\win-unpacked\DSH-Sesame.exe` 是能正常跑的 —— 看着像打包坏了，其实是空间不够。验证时把 `TEMP` / `TMP` 指到大盘。
+
 
 ## 几条必须知道的架构约定
 
@@ -42,4 +42,3 @@ npm run dist && node scripts/publish-release.mjs
 - **插件与数据按 profile 隔离、不按 dsh 版本隔离** —— 所有 dsh 版本共用 `~/.dsh/profiles/<name>`。
 - **启动需要真正的 `node.exe`**：不能用 Electron 自带的（dsh 的加载器会拒绝它的 V8 指纹）。解析顺序见 `src/main/runtime.ts`。
 
-更深的设计说明写在代码注释里（每个模块头部），不再单独维护文档。

@@ -22,7 +22,9 @@ import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(fileURLToPath(import.meta.url))
-const TARGET = process.env['SESAME_RELEASE_DIR'] ?? 'D:\\agent\\DSH-Sesame-release'
+// 默认取**项目目录的同级目录**（用脚本自身位置推算，所以与谁在哪台机器上克隆无关）。
+// 需要换位置时用环境变量 SESAME_RELEASE_DIR 覆盖。
+const TARGET = process.env['SESAME_RELEASE_DIR'] ?? join(ROOT, '..', '..', 'DSH-Sesame-release')
 const STAGE_NAME = '_stage'
 const SOURCE = join(TARGET, STAGE_NAME)
 const dryRun = process.argv.includes('--dry-run')
