@@ -6,13 +6,17 @@ dsh 的桌面启动器（Electron + Vue 3 + TypeScript）：管理 dsh 版本、
 
 ```powershell
 cd <项目目录>
-npm run dist && node scripts/publish-release.mjs
+npm run release
 ```
 
-等价于 `npm run release`。成品位置由 `electron-builder.yml` 的 `output:` 决定（默认是**与本项目平级**的 `DSH-Sesame-release\`）—— 发布脚本会读它，所以只有那一处定义。临时改到别处也可以用环境变量 `SESAME_RELEASE_DIR`：
-`DSH-Sesame-Setup-<版本>.exe` 及其 `.blockmap`、`latest.yml`（后两者由 electron-builder 自动生成）。
+它等于 `npm run dist && node scripts/publish-release.mjs`，分两步是有意的：
 
-**为什么分两步**：electron-builder 先写进 `_stage\`，`publish-release.mjs` 确认构建完整（安装包非空）才提到顶层 —— 这样失败的构建不会在发布目录里留下看起来正常的半成品。
+- **`npm run dist`** —— typecheck + 编译 + electron-builder 打包，产物先写进**暂存目录**（不直接进顶层）
+- **`node scripts/publish-release.mjs`** —— 确认构建完整（安装包非空）之后，才把产物提到顶层并删掉暂存目录
+
+**为什么要分两步**：失败的构建会在暂存目录里留下看起来正常的半成品；先暂存、校验后再提，发布目录里就只会有完整的产物。
+
+成品位置由 `electron-builder.yml` 的 `output:` 决定（默认是**与本项目平级**的 `DSH-Sesame-release\`）—— 发布脚本会读它，所以只有那一处定义；临时改到别处也可以用环境变量 `SESAME_RELEASE_DIR`。产物是 `DSH-Sesame-Setup-<版本>.exe` 及其 `.blockmap`、`latest.yml`（后两者由 electron-builder 自动生成）。
 
 ## 命令
 
