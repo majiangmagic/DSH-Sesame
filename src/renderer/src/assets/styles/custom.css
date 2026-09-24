@@ -357,33 +357,52 @@
   will-change: transform, opacity;
 }
 
-/* 右上：品红偏紫，冷艳的那一侧 */
+/* 右上：品红偏紫，冷艳的那一侧。
+ *
+ * 尺寸与浓度是第三次调整的结果：原来是 92vmax / alpha 0.20 / 大半在屏幕外 ——
+ * 平移那种柔光的观感只是"整片亮度微微变了"，眼睛读成静止，行程加到多大都没用。
+ * 现在缩到 42vmax 并提高浓度、把核心挪进可视区，位移才表现为"一个亮团在屏幕上走"。
+ */
 .backdrop-grid-mask::before {
-  width: 92vmax;
-  height: 92vmax;
-  right: -26vmax;
-  top: -34vmax;
-  background: radial-gradient(circle, rgba(217, 70, 239, 0.20) 0%, transparent 62%);
+  width: 42vmax;
+  height: 42vmax;
+  right: 4vmax;
+  top: -6vmax;
+  background: radial-gradient(
+    circle,
+    rgba(217, 70, 239, 0.34) 0%,
+    rgba(217, 70, 239, 0.12) 42%,
+    transparent 70%
+  );
   animation: neon-drift-a 15s ease-in-out infinite alternate;
 }
 
 /* 左下：正紫，压住暗部 */
 .backdrop-grid-mask::after {
-  width: 86vmax;
-  height: 86vmax;
-  left: -24vmax;
-  bottom: -32vmax;
-  background: radial-gradient(circle, rgba(124, 58, 237, 0.26) 0%, transparent 64%);
+  width: 40vmax;
+  height: 40vmax;
+  left: 2vmax;
+  bottom: -4vmax;
+  background: radial-gradient(
+    circle,
+    rgba(124, 58, 237, 0.38) 0%,
+    rgba(124, 58, 237, 0.14) 44%,
+    transparent 72%
+  );
   animation: neon-drift-b 19s ease-in-out infinite alternate;
 }
 
 /*
- * 漂移幅度：行程 24~26vmax、周期 15s / 19s（≈22px/秒），并带明显明暗变化。
+ * 漂移方向：两团**互相垂直**（一团横着走、一团竖着走），不是相反方向。
  *
- * 第一版是 9vmax / 8vmax 配 24s / 31s，约 6px/秒 —— 对一团 92vmax 宽、透明度 0.20、
- * 大半在屏幕外的柔光来说**看不出来在动**（用户反馈"好像没动"，核算后确实如此）。
- * 教训：验证"动画在跑"不能用 getComputedStyle 的数值变化当判据，那只能证明数值在变；
- * 要证明"看得见"，得比对两个时刻的画面像素差。
+ * 这是第三次修正。前两版都在调幅度和周期，但实测紫光的**重心纹丝不动**
+ * （907.8,302.3 → 907.9,302.8 → 907.8,302.2，变化 <1px）：因为两团往相反方向走，
+ * 合成重心互相抵消 —— 无论行程多大，观感都只是"整片亮了一点"。
+ *
+ * 教训（写给以后的自己）：
+ *   1. 验证动画要测**感知量**（这里用紫光像素的质心位移），不是 computed 数值是否在变；
+ *   2. 也不要只看"整屏平均像素差"—— 大面积、每像素很微小的变化，数字在动、眼睛不动；
+ *   3. 多个元素一起动时，要看**合成重心**会不会抵消。
  */
 @keyframes neon-drift-a {
   0% {
@@ -394,7 +413,7 @@
     opacity: 1;
   }
   100% {
-    transform: translate3d(-26vmax, 18vmax, 0) scale(1.18);
+    transform: translate3d(-26vmax, 0, 0) scale(1.2);
     opacity: 0.6;
   }
 }
@@ -408,7 +427,7 @@
     opacity: 0.98;
   }
   100% {
-    transform: translate3d(24vmax, -17vmax, 0) scale(0.94);
+    transform: translate3d(0, -20vmax, 0) scale(0.9);
     opacity: 0.54;
   }
 }
