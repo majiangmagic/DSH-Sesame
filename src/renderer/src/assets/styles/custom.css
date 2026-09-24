@@ -1094,3 +1094,17 @@ main,
   border-color: rgba(255, 122, 138, 0.4);
   color: #ffb3bd;
 }
+
+/* ---- 设置页的输入框统一左对齐，与同级下拉框一致 ----
+ *
+ * components.css:357 有 `.form-row input { text-align: right }` —— 那是原版给
+ * "管理页端口"这类数字框定的（数字右对齐便于按位比对）。但本页里和它并排的
+ * 「启动 profile」「界面语言」是 <select>，不吃这条规则、是左对齐的 ——
+ * 于是端口框里的 "3080" 挤在右边，和「web」「中文」看起来不齐。
+ *
+ * `.form-row.wide input`（额外参数那一行）本来就是 text-align: left，所以这里
+ * 只覆盖非 wide 的，不动长文本框。
+ */
+.preferences .form-row:not(.wide) input {
+  text-align: left;
+}
