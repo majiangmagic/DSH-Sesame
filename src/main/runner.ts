@@ -76,7 +76,7 @@ export function runTail(): string[] {
 }
 
 /** 子进程环境。这些变量 dsh 自己以及它拉起的插件都会读。 */
-function envFor(version: string, node: { path: string }, profile: string): NodeJS.ProcessEnv {
+export function envFor(version: string, node: { path: string }, profile: string): NodeJS.ProcessEnv {
   const bin = versionBin(version)
   return {
     ...process.env,
@@ -154,7 +154,7 @@ export function bootArgs(profile: string, port: number): string[] {
 }
 
 /** 杀整棵进程树。Windows 必须用 taskkill /T，否则 worker 线程会变成孤儿。 */
-function killTree(pid: number | undefined): void {
+export function killTree(pid: number | undefined): void {
   if (!pid) return
   if (process.platform === 'win32') {
     spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })

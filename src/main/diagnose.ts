@@ -29,6 +29,7 @@ import { join } from 'node:path'
 import type { DiagnosedProblem, DiagnosisResult } from '@shared/diagnose'
 import { dshHome } from './dshHome'
 import { requireNode } from './runtime'
+import { bootArgs, envFor, killTree, READY_RE } from './runner'
 import { readSettings } from './settings'
 import { versionBin } from './paths'
 
@@ -127,34 +128,42 @@ export function diagnose(version: string, port: number): Promise<DiagnosisResult
   const started = Date.now()
 
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      node.path,
-      [bin, '--profile', profile, '--host', '127.0.0.1', '--port', String(port), '--no-open'],
-      {
-        cwd: home,
-        env: {
-          ...process.env,
-          DSH_HOME: home,
-          DSH_NODE: node.path,
-          DSH_BIN: bin,
-          NO_COLOR: '1',
-          CI: 'true',
-          PYTHONIOENCODING: 'utf-8',
-          PYTHONUTF8: '1'
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true
-      }
-    )
+    /*
+     * 参数与环境**全部复用 runner.ts** —— 探针的启动条件必须和真实启动一模一样。
+     * 之前自己拼了一版，漏了三样：profile 是位置参数（不是 --profile）、
+     * 用户的额外启动参数、以及 envFor 里 NODE_OPTIONS 的 --use-system-ca
+     * （挂代理时缺它会 TLS 失败 → 探针报的是假故障）。
+     */
+    const child = spawn(node.path, [bin, ...bootArgs(profile, port)], {
+      cwd: home,
+      env: { ...envFor(version, node, profile), NO_COLOR: '1', CI: 'true' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    })
 
     const lines: string[] = []
     let outcome: DiagnosisResult['outcome'] = 'timeout'
     let lastOutput = Date.now()
     let settled = false
 
+    let ready = false
     const onChunk = (buf: Buffer): void => {
       lastOutput = Date.now()
-      for (const l of String(buf).split(/\r?\n/)) if (l.trim() !== '') lines.push(l)
+      for (const l of String(buf).split(/\r?\n/)) {
+        if (l.trim() === '') continue
+        lines.push(l)
+        /*
+         * 看到就绪地址 ⇒ 立刻判定成功，并主动停掉探针。
+         *
+         * **绝不能让静默期在这之后生效**：dsh 就绪后本来就不再输出，那不是卡住。
+         * 这一条是用户实测发现的 —— 界面报了「启动失败」，其实 dsh 已经起来了，
+         * 是我的看门狗 8 秒后把它杀了。
+         */
+        if (!ready && READY_RE.test(l)) {
+          ready = true
+          void finish('ready')
+        }
+      }
     }
     child.stdout?.on('data', onChunk)
     child.stderr?.on('data', onChunk)
@@ -167,7 +176,8 @@ export function diagnose(version: string, port: number): Promise<DiagnosisResult
       outcome = why
       // 还在跑就停掉 —— 探针不该把 dsh 留在那儿
       if (child.exitCode === null && !child.killed) {
-        try { child.kill() } catch { /* ignore */ }
+        // 杀整棵进程树：dsh 会起 worker 与子进程，只杀父进程会留孤儿
+        killTree(child.pid)
       }
       const rawText = lines.join('\n')
       const parsed = parseDiagnosis(rawText)
@@ -196,7 +206,7 @@ export function diagnose(version: string, port: number): Promise<DiagnosisResult
     const cap = setTimeout(() => { void finish(outcome === 'ready' ? 'ready' : 'timeout') }, HARD_CAP_MS)
     // 静默期：连续无输出 ⇒ 判定卡住
     const watch = setInterval(() => {
-      if (Date.now() - lastOutput > QUIET_MS) void finish('timeout')
+      if (!ready && Date.now() - lastOutput > QUIET_MS) void finish('timeout')
     }, 1000)
 
     child.on('error', (err) => {

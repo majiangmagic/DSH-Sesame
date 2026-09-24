@@ -216,6 +216,12 @@ onMounted(async () => {
     不新增 CSS —— 否则又会变成"自己发明布局"那类问题。
     只列**有问题的插件名**（dsh 的 Failed plugins 那段）。
   -->
+  <!--
+    Teleport 到 body：祖先若带 transform / filter / backdrop-filter，
+    position:fixed 会**相对那个祖先**定位 —— 弹窗因此被困在插件卡片里，
+    并被卡片内容盖住，取消按钮点不到（用户实测）。Teleport 是标准解法。
+  -->
+  <Teleport to="body">
   <div v-if="showDiag && diagnosis" class="confirm-layer" id="diagLayer">
     <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="diagTitle">
       <h2 class="confirm-title" id="diagTitle">{{ t('check.title') }}</h2>
@@ -257,4 +263,5 @@ onMounted(async () => {
       </div>
     </div>
   </div>
+  </Teleport>
 </template>
