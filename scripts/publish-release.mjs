@@ -5,7 +5,6 @@
  *   D:\agent\DSH-Sesame-release\           ← 成品目录
  *       DSH-Sesame-Setup-0.1.0.exe         ← 安装包（发布脚本从 _stage 提上来）
  *       DSH-Sesame-0.1.0-portable.exe
- *       MANIFEST.txt                        ← sha256 清单
  *       _stage\                             ← 打包暂存，发布完成后被删除
  *
  * 为什么 electron-builder 不直接输出到顶层：构建中途失败会在那儿留下看起来正常的
@@ -16,7 +15,6 @@
  *   node scripts/publish-release.mjs --dry-run
  *   node scripts/publish-release.mjs
  */
-import { createHash } from 'node:crypto'
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
@@ -105,16 +103,8 @@ for (const item of entries) {
   await cp(join(SOURCE, item.file), dest)
 }
 
-console.log('计算校验和…')
-const lines = [`DSH-Sesame ${pkg.version}`, `生成时间 ${new Date().toISOString()}`, '', 'sha256:']
-for (const item of entries.filter((entry) => /\.(exe|msi|zip|7z)$/i.test(entry.file))) {
-  const body = await readFile(join(TARGET, item.file))
-  lines.push(`  ${createHash('sha256').update(body).digest('hex')}  ${item.file}`)
-}
-await writeFile(join(TARGET, 'MANIFEST.txt'), `${lines.join('\n')}\n`)
 
 console.log('清理暂存…')
 await rm(SOURCE, { recursive: true, force: true })
 
 console.log(`\n完成：${entries.length} 个文件已发布到 ${TARGET}`)
-console.log(`清单  ${join(TARGET, 'MANIFEST.txt')}`)
