@@ -52,6 +52,25 @@ function resolveFromYml() {
 const fromYml = resolveFromYml()
 const TARGET = fromYml.target
 const STAGE_NAME = fromYml.stage
+
+/*
+ * 安全防护：成品目录不得是**项目目录本身**，也不得是它的**祖先**。
+ *
+ * 这个脚本收尾时会"清理上一次发布的产物" —— 删掉成品目录顶层除暂存目录外的所有东西。
+ * 如果 electron-builder.yml 的 output 写成 `dist`（**那正是 electron-builder 的默认值**，
+ * 很容易被顺手写上），成品目录就解析成项目根，那一步会删掉 src/、package.json、
+ * scripts/ 乃至 **.git/** —— 项目直接没了。指向祖先则会把本项目整个删掉，后果更重。
+ * 宁可在这里中止，也不要靠"没人会那么写"。
+ */
+const PROJECT_DIR = resolve(ROOT, '..')
+const resolvedTarget = resolve(TARGET)
+if (resolvedTarget === PROJECT_DIR || PROJECT_DIR.startsWith(resolvedTarget + sep)) {
+  console.error(`成品目录解析成了项目目录${resolvedTarget === PROJECT_DIR ? '本身' : '的祖先'}：${resolvedTarget}`)
+  console.error('这会让"清理上一次产物"删掉项目里的文件（含 .git）。已中止。')
+  console.error('请把 electron-builder.yml 的 output 改成项目之外的目录，')
+  console.error('例如：output: ../DSH-Sesame-release/_stage')
+  process.exit(1)
+}
 const SOURCE = join(TARGET, STAGE_NAME)
 const dryRun = process.argv.includes('--dry-run')
 
