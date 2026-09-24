@@ -1,10 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { DiagnosisResult } from '@shared/diagnose'
 import {
   LOG_CHANNELS,
   MARKET_CHANNELS,
   PLUGIN_CHANNELS,
   SETTINGS_CHANNELS,
   VERSION_CHANNELS,
+  DIAGNOSE_CHANNELS,
   WINDOW_CHANNELS,
   type LauncherSettingsPayload,
   type PluginProgressEvent,
@@ -139,6 +141,14 @@ const api = {
       ipcRenderer.invoke(MARKET_CHANNELS.catalog, region),
     /** 「更新自己」所需：内置版本 + 市场判定的目标 + 裸查结果 */
     selfVersion: (): Promise<MarketSelfUpdate> => ipcRenderer.invoke(MARKET_CHANNELS.selfVersion)
+  },
+
+  diagnose: {
+    /**
+     * 限时启动一次并解析 dsh 自己的失败诊断。
+     * **会真的起 dsh**（用完即停），所以由用户显式点按钮触发。
+     */
+    run: (version: string): Promise<DiagnosisResult> => ipcRenderer.invoke(DIAGNOSE_CHANNELS.run, version)
   },
 
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke(WINDOW_CHANNELS.openExternal, url)

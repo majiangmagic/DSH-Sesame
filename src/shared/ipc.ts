@@ -110,3 +110,13 @@ export type PluginChannel = (typeof PLUGIN_CHANNELS)[keyof typeof PLUGIN_CHANNEL
 export type MarketChannel = (typeof MARKET_CHANNELS)[keyof typeof MARKET_CHANNELS]
 export type LogChannel = (typeof LOG_CHANNELS)[keyof typeof LOG_CHANNELS]
 export type SettingsChannel = (typeof SETTINGS_CHANNELS)[keyof typeof SETTINGS_CHANNELS]
+
+/**
+ * 启动诊断。**会真的启动一次 dsh**（用完即停）—— 因为要抓"搞坏启动"的插件，
+ * harness 连它一起启动是唯一办法（这一点与 dsh-plugin-guard 的结论一致）。
+ */
+export const DIAGNOSE_CHANNELS = {
+  run: 'diagnose:run'
+} as const
+
+export type DiagnoseChannel = (typeof DIAGNOSE_CHANNELS)[keyof typeof DIAGNOSE_CHANNELS]

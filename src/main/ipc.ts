@@ -1,5 +1,6 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
+  DIAGNOSE_CHANNELS,
   LOG_CHANNELS,
   MARKET_CHANNELS,
   PLUGIN_CHANNELS,
@@ -18,6 +19,7 @@ import { assessProfile, checkMarketUpdate, loadCatalog, loadMarket, listSnapshot
 import { overview } from './versions'
 import { clearLog, logSnapshot, pushTagged } from './logbus'
 import { readSettings, writeSettings } from './settings'
+import { diagnose } from './diagnose'
 
 /**
  * 业务 IPC 注册。
@@ -28,6 +30,16 @@ import { readSettings, writeSettings } from './settings'
  * 插件开关默认作用于 `web` profile（`DSH_HOME` 可覆盖，dsh 自身也是这个规则）。
  */
 export function registerBusinessIpc(): void {
+  /**
+   * 启动诊断：限时启动一次，解析 dsh 自己的失败诊断。
+   *
+   * 端口用设置里的那个（复现真实情况）。**它会真的起 dsh**，用完即停 ——
+   * 要抓"搞坏启动"的插件，harness 连插件一起启动是唯一办法。
+   */
+  ipcMain.handle(DIAGNOSE_CHANNELS.run, (_event: IpcMainInvokeEvent, version: string) =>
+    diagnose(version, readSettings().port)
+  )
+
   ipcMain.handle(VERSION_CHANNELS.overview, () => overview())
 
   ipcMain.handle(VERSION_CHANNELS.install, async (event: IpcMainInvokeEvent, version: string) => {

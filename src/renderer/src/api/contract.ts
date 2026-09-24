@@ -1,6 +1,7 @@
 import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate } from '@shared/market'
 import type { PluginEntry, PluginList, PluginReason } from '@shared/plugins'
 import type { VersionOverview, VersionStatus } from '@shared/versions'
+import type { DiagnosisResult } from '@shared/diagnose'
 
 /**
  * 接口契约 —— 只有类型，没有实现。
@@ -80,6 +81,12 @@ export interface ManagerApi {
   getVersionOverview(): Promise<VersionOverview>
 
   /** 真实：读 profile 的已装插件（主进程照实回全量，渲染层过滤掉官方组件） */
+  /**
+   * 限时启动一次当前版本并解析 dsh 自己的失败诊断，返回**有问题的插件**。
+   * 会真的起 dsh（用完即停）。
+   */
+  runDiagnosis(version: string): Promise<DiagnosisResult>
+
   getPlugins(): Promise<PluginList>
 
   /** 读启动器设置（存 `<userData>/settings.json`，读失败退回默认值） */

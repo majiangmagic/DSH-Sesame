@@ -1,6 +1,7 @@
 import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/market'
 import type { PluginList } from '@shared/plugins'
 import type { VersionOverview } from '@shared/versions'
+import type { DiagnosisResult } from '@shared/diagnose'
 import type {
   InstallProgress,
   ManagerApi,
@@ -29,6 +30,8 @@ export const realApi: ManagerApi = {
    * 展示出来只会占位。过滤放在这一层，控制页与插件页拿到的是同一份，不会两处不一致。
    * 主进程照实回全量，需要时随时能把官方项显示回来。
    */
+  runDiagnosis: (version: string): Promise<DiagnosisResult> => window.sesame.diagnose.run(version),
+
   async getPlugins(): Promise<PluginList> {
     const list = await window.sesame.plugins.list()
     return { ...list, plugins: list.plugins.filter((plugin) => !plugin.official) }

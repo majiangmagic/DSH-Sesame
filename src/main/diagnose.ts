@@ -26,6 +26,7 @@
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import type { DiagnosedProblem, DiagnosisResult } from '@shared/diagnose'
 import { dshHome } from './dshHome'
 import { requireNode } from './runtime'
 import { readSettings } from './settings'
@@ -37,30 +38,6 @@ const HARD_CAP_MS = 45_000
 const QUIET_MS = 8_000
 /** 原样保留的尾部行数（解析不出来时界面仍有东西可看） */
 const RAW_TAIL_LINES = 50
-
-export interface DiagnosedProblem {
-  /** dsh 报出来的层 id */
-  id: string
-  /** 是否声明为必需（必需插件起不来 ⇒ 整个启动判定失败） */
-  required: boolean
-  /** dsh 给的包名；有它就用它去匹配已装插件（比 id 稳，id 可能被用户改过） */
-  pkg: string | null
-  /** 失败原因的第一行 */
-  error: string | null
-}
-
-export interface DiagnosisResult {
-  outcome: 'ready' | 'failed' | 'timeout'
-  durationMs: number
-  /** **只有 `Failed plugins` 那一段** —— 根因 */
-  problems: DiagnosedProblem[]
-  /** bundle 层被跳过的（声明不全 / overlay 读不到） */
-  skipped: Array<{ name: string; reason: string }>
-  /** 启动失败时 dsh 落的那份日志 */
-  logPath: string | null
-  /** 原样尾部，供界面兜底展示 */
-  rawTail: string[]
-}
 
 const RE_FAILED_HEAD = /^Failed plugins \((\d+)\):/
 const RE_ENTRY = /^ {2}(\S+) \((required|optional)\)$/
