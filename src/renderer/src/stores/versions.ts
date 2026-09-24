@@ -108,6 +108,11 @@ export const useVersionsStore = defineStore('versions', () => {
     try {
       await api.startVersion(version)
       await load()
+      // 启动成功后默认用系统浏览器打开 web UI。
+      // startVersion 会等到 dsh 打印就绪地址才 resolve，所以这里 url 通常已经在了；
+      // 万一还没有（拿不到地址），就只是不弹，不影响启动本身。
+      const url = running.value?.url
+      if (url) void window.sesame.openExternal(url)
     } catch (cause) {
       fail(cause)
     } finally {
