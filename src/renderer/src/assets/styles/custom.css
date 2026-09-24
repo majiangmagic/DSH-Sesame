@@ -935,3 +935,133 @@ main,
  *     .backdrop-grid-mask::after { animation: none; }
  *   }
  */
+
+/* ---- 会漂移的小光球（真正的 DOM 元素）----
+ *
+ * `.backdrop-grid-mask` 的两个伪元素已经用掉了，再加光球必须用元素。
+ * 这些球比那两团大光团更小更亮 —— 它们的职责是"让眼睛看到有东西在游动"，
+ * 而大光团负责整体氛围。四颗的周期/方向/颜色都不同，永远不会同步。
+ */
+.grid-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* 中左：淡紫，斜向漂移 */
+.grid-orb-c {
+  width: 18vmax;
+  height: 18vmax;
+  left: 16vmax;
+  top: 28vmax;
+  background: radial-gradient(
+    circle,
+    rgba(206, 150, 255, 0.46) 0%,
+    rgba(170, 110, 250, 0.22) 22%,
+    transparent 62%
+  );
+  animation: neon-orb-c 6s ease-in-out infinite alternate;
+}
+
+/* 上中：品红，竖着走 */
+.grid-orb-d {
+  width: 13vmax;
+  height: 13vmax;
+  left: 44vmax;
+  top: -3vmax;
+  background: radial-gradient(
+    circle,
+    rgba(255, 130, 246, 0.5) 0%,
+    rgba(226, 92, 230, 0.22) 20%,
+    transparent 60%
+  );
+  animation: neon-orb-d 5s ease-in-out infinite alternate;
+}
+
+/* 右下：深紫，大一点、慢一点 */
+.grid-orb-e {
+  width: 22vmax;
+  height: 22vmax;
+  right: 4vmax;
+  bottom: 4vmax;
+  background: radial-gradient(
+    circle,
+    rgba(132, 92, 245, 0.42) 0%,
+    rgba(104, 60, 220, 0.2) 24%,
+    transparent 64%
+  );
+  animation: neon-orb-e 8s ease-in-out infinite alternate;
+}
+
+/* 中下：亮紫小点，最快、最小 —— 像一颗游动的亮点 */
+.grid-orb-f {
+  width: 9vmax;
+  height: 9vmax;
+  left: 30vmax;
+  bottom: 12vmax;
+  background: radial-gradient(
+    circle,
+    rgba(238, 172, 255, 0.56) 0%,
+    rgba(196, 120, 255, 0.24) 26%,
+    transparent 62%
+  );
+  animation: neon-orb-f 4s ease-in-out infinite alternate;
+}
+
+/* 每颗球走不同的轴/方向，合成重心才会真的移动（相反的会互相抵消，见上面的教训） */
+@keyframes neon-orb-c {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(22vmax, -14vmax, 0) scale(1.18);
+    opacity: 0.62;
+  }
+}
+
+@keyframes neon-orb-d {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.1);
+    opacity: 0.66;
+  }
+  50% {
+    opacity: 0.98;
+  }
+  100% {
+    transform: translate3d(10vmax, 26vmax, 0) scale(0.92);
+    opacity: 0.6;
+  }
+}
+
+@keyframes neon-orb-e {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.64;
+  }
+  50% {
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate3d(-20vmax, -16vmax, 0) scale(1.14);
+    opacity: 0.58;
+  }
+}
+
+@keyframes neon-orb-f {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(26vmax, -10vmax, 0) scale(1.3);
+    opacity: 0.55;
+  }
+}
