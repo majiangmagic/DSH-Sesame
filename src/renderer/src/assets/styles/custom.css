@@ -1196,6 +1196,13 @@ main,
 .form-row.wide .inline-input input {
   flex: 1 1 auto;
   min-width: 0;
+  /*
+   * 宽度必须显式覆盖:原版 `.form-row input` 给的是固定 104px,
+   * 只写 flex 是压不过它的 —— 结果就是"输入框 + 按钮"那行里,
+   * 输入框一直只有 104px，路径和占位文字都看不全（用户两次截图）。
+   * 这里只影响 .inline-input 里的输入框，不碰「额外启动参数」那种普通整行输入。
+   */
+  width: auto;
 }
 
 #pickDshHome {
