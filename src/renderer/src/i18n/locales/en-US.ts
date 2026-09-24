@@ -1,4 +1,4 @@
-import type zhCN from './zh-CN'
+﻿import type zhCN from './zh-CN'
 
 /**
  * English copy.
@@ -166,10 +166,10 @@ const enUS: typeof zhCN = {
     profile: 'Start profile',
     port: 'Startup port',
     dshHome: 'Data directory (DSH_HOME)',
-    dshHomePlaceholder: 'Leave empty to use the DSH_HOME env var or the default ~/.dsh',
+    dshHomePlaceholder: 'Empty = default',
     uiLang: 'Interface language',
     args: 'Extra startup arguments',
-    argsPlaceholder: 'e.g. --log-level debug',
+    argsPlaceholder: '--log-level debug',
     dataDir: 'Version directory',
     browse: 'Browse…',
     save: 'Save',

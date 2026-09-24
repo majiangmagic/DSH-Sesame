@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 中文文案。
  *
  * 本文件是文案的**唯一真相**：key 命名约定是 `<区域>.<用途>`，与
@@ -165,10 +165,10 @@ export default {
     profile: '启动 profile',
     port: '启动端口',
     dshHome: '数据目录（DSH_HOME）',
-    dshHomePlaceholder: '留空则用 DSH_HOME 环境变量或默认的 ~/.dsh',
+    dshHomePlaceholder: '留空 = 默认',
     uiLang: '界面语言',
     args: '额外启动参数',
-    argsPlaceholder: '例如：--log-level debug',
+    argsPlaceholder: '--log-level debug',
     dataDir: '版本目录',
     browse: '浏览…',
     save: '保存',
