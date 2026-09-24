@@ -139,11 +139,23 @@ if (dryRun) {
  * 因为暂存目录本身就在目标目录里面，整体清空会把自己也删掉。
  */
 await mkdir(TARGET, { recursive: true })
+/*
+ * 只删**看起来是本项目产物**的文件，不再整目录清空。
+ *
+ * 原来是"除暂存目录外全删"：一旦 output 指错、或指向一个本来就有别的文件的目录，
+ * 那些无关文件也会被删掉。改成按名字判断后，不认识的东西一律不碰。
+ * （同时上面的安全防护仍然拦着"成品目录 = 项目目录或其祖先"那种情况。）
+ */
+const REMOVABLE = /^(DSH-Sesame-.*\.(exe|exe\.blockmap|blockmap)|latest\.ya?ml|MANIFEST\.txt)$/i
+let cleanedCount = 0
 for (const entry of await readdir(TARGET, { withFileTypes: true })) {
   if (entry.name === STAGE_NAME) continue
+  if (!REMOVABLE.test(entry.name)) continue
   await rm(join(TARGET, entry.name), { recursive: true, force: true })
+  cleanedCount += 1
 }
 
+console.log(cleanedCount > 0 ? `清理上一次产物 ${cleanedCount} 个` : '没有需要清理的上一次产物')
 console.log('提取产物到顶层…')
 for (const item of entries) {
   const dest = join(TARGET, item.file)
