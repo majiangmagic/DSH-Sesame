@@ -136,6 +136,10 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
         DSH_HOME: dshHome(),
         DSH_NODE: node.path,
         npm_config_update_notifier: 'false',
+        // 取自 dshmarket（lib/install.js:131）："the market runs pnpm with CI=true
+        // (TTY hangs)"。pnpm 在非 CI 环境下会走交互分支，遇到需要确认/等待输入的
+        // 情形就永久挂住 —— 正是我遇到过的症状（90 秒零输出、永不结束）。
+        CI: 'true',
         // **不要再把 progress 关掉**：这里原来是 `npm_config_progress: 'false'`，
         // pnpm 因此几乎不输出，界面上就成了"点了更新、什么都没发生"。
         // append-only 让 pnpm 以纯文本逐行输出（不依赖 TTY），才拿得到持续可见的进度。
@@ -341,10 +345,39 @@ export async function updatePlugin(
   const dsh = pickDsh()
   onProgress({ phase: 'resolve', text: `把 ${packageName} 更新到 ${target}…` })
 
-  const outcome = await run(
-    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', `${packageName}@${target}`, RELEASE_AGE_BYPASS],
-    (line) => progressLine(line, onProgress)
-  )
+  /*
+   * 先**不带**发布年龄绕过跑一次 —— 尊重那道护栏是默认行为。
+   * 只有两种证据出现时，才带绕着重试一次（这是 dshmarket 的做法：
+   * 它的 recovery 路径 release-age-violation 就是这么处理的）：
+   *   · 命令失败，且输出里出现发布年龄的特征
+   *   · 命令**成功但版本没变** —— pnpm 那道闸是"静默保留旧版本、退出码 0"，
+   *     只查清单会把它当成更新成功（我上次就栽在这里）
+   */
+  const addSpec = `${packageName}@${target}`
+  const attempt = (extra: string[]): Promise<{ code: number; tail: string[] }> =>
+    run([dsh.bin, 'plugin', '--profile', PROFILE, 'add', addSpec, ...extra], (line) =>
+      progressLine(line, onProgress)
+    )
+
+  let outcome = await attempt([])
+  let text = outcome.tail.join('\n')
+  if (outcome.code !== 0 && !/release|minimumReleaseAge|too young/i.test(text)) {
+    // 不是发布年龄的问题 —— 直接按失败报出去，不做无依据的重试
+    throw new Error(
+      `更新 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`
+    )
+  }
+  const landed = (): boolean => installedVersion(packageName) === target
+  if (!landed()) {
+    onProgress({
+      phase: 'resolve',
+      text:
+        outcome.code === 0
+          ? `版本没有变化（pnpm 的最小发布年龄保护会静默保留旧版本），带 ${RELEASE_AGE_BYPASS} 重试一次…`
+          : `输出里出现发布年龄特征，带 ${RELEASE_AGE_BYPASS} 重试一次…`
+    })
+    outcome = await attempt([RELEASE_AGE_BYPASS])
+  }
   if (outcome.code !== 0) {
     throw new Error(
       `更新 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`
@@ -354,7 +387,7 @@ export async function updatePlugin(
   if (after === undefined) {
     throw new Error(`命令成功退出，但 ${packageName} 从 profile 清单里消失了`)
   }
-  /**
+  /*
    * **核对真正装上的版本**，不能只看清单 —— 这就是上次把"什么都没发生"当成
    * 更新成功的原因（用户看到"已更新到 1.61.0"，实际磁盘上还是 1.47.0）。
    */
@@ -362,8 +395,7 @@ export async function updatePlugin(
   if (installed !== target) {
     throw new Error(
       `命令成功退出，但 ${packageName} 实际装的仍是 ${installed ?? '(读不到版本)'}，不是 ${target}。\n` +
-        '最常见的原因是 pnpm 的"最小发布年龄"保护静默跳过了较新的版本；' +
-        `本次已经带了 ${RELEASE_AGE_BYPASS} 仍然如此，说明是别的原因。\n` +
+        `已经带 ${RELEASE_AGE_BYPASS} 重试过仍然如此，说明是别的原因（不是发布年龄）。\n` +
         `${outcome.tail.slice(-10).join('\n')}`
     )
   }
