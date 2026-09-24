@@ -167,7 +167,6 @@ const enUS: typeof zhCN = {
     port: 'Startup port',
     dshHome: 'Data directory (DSH_HOME)',
     dshHomePlaceholder: 'Leave empty to use the DSH_HOME env var or the default ~/.dsh',
-    dshHomeHint: 'Changing this switches to a different data directory: plugins and profiles move with it. A running dsh needs a restart to use the new path.',
     uiLang: 'Interface language',
     args: 'Extra startup arguments',
     argsPlaceholder: 'e.g. --log-level debug',
