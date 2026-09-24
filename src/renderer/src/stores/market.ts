@@ -294,9 +294,40 @@ export const useMarketStore = defineStore('market', () => {
    * 走 dsh 自己的插件命令（`dsh plugin --profile <name> add <pkg>` → pnpm），
    * **不是**我们自己 npm install —— profile 用的是 pnpm 布局，混用会把依赖树搞坏。
    */
+  /**
+   * 结果提示的存活时间。
+   *
+   * 这个功能的两次修正值得记下来：最初在 finally 里直接清空 → 用户**永远看不到**
+   * "成功还是失败"；改成不清 → 提示**永远挂在页面上**（"dshmarket 已更新到 1.61.0"
+   * 一直显示）。现在折中：显示够看清，然后自己消失。
+   * 错误留得久一些（要读、要照做），成功短一些。完整输出在终端页里始终可查。
+   */
+  const RESULT_TTL_MS = 8000
+  const ERROR_TTL_MS = 20000
+  let resultTimer: ReturnType<typeof setTimeout> | null = null
+
+  function cancelResultClear(): void {
+    if (resultTimer !== null) {
+      clearTimeout(resultTimer)
+      resultTimer = null
+    }
+  }
+
+  /** 操作结束后调用：延时把提示收掉。错误留得比成功久。 */
+  function scheduleResultClear(): void {
+    cancelResultClear()
+    const delay = error.value === '' ? RESULT_TTL_MS : ERROR_TTL_MS
+    resultTimer = setTimeout(() => {
+      resultTimer = null
+      progressText.value = ''
+      error.value = ''
+    }, delay)
+  }
+
   async function install(name: string): Promise<void> {
     if (busyName.value !== null) return
     busyName.value = name
+    cancelResultClear()
     progressText.value = ''
     error.value = ''
     try {
@@ -308,10 +339,7 @@ export const useMarketStore = defineStore('market', () => {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       busyName.value = null
-      // **不要清 progressText**：它是"上一次操作的结果"，而主进程推来的最后一行
-      // 正是结论（「dshmarket 已更新到 1.61.0」）。清掉之后用户就永远看不到
-      // 成功与否 —— 之前就是这样，点了更新只看到进度一闪，然后什么都没有。
-      // 下一次操作开始时（函数体的开头）才会清空。
+      scheduleResultClear()
     }
   }
 
@@ -324,6 +352,7 @@ export const useMarketStore = defineStore('market', () => {
   async function update(name: string, target: string): Promise<void> {
     if (busyName.value !== null) return
     busyName.value = name
+    cancelResultClear()
     progressText.value = ''
     error.value = ''
     try {
@@ -335,10 +364,7 @@ export const useMarketStore = defineStore('market', () => {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       busyName.value = null
-      // **不要清 progressText**：它是"上一次操作的结果"，而主进程推来的最后一行
-      // 正是结论（「dshmarket 已更新到 1.61.0」）。清掉之后用户就永远看不到
-      // 成功与否 —— 之前就是这样，点了更新只看到进度一闪，然后什么都没有。
-      // 下一次操作开始时（函数体的开头）才会清空。
+      scheduleResultClear()
     }
   }
 
@@ -352,6 +378,7 @@ export const useMarketStore = defineStore('market', () => {
   async function uninstall(name: string): Promise<void> {
     if (busyName.value !== null) return
     busyName.value = name
+    cancelResultClear()
     progressText.value = ''
     error.value = ''
     try {
@@ -363,10 +390,7 @@ export const useMarketStore = defineStore('market', () => {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       busyName.value = null
-      // **不要清 progressText**：它是"上一次操作的结果"，而主进程推来的最后一行
-      // 正是结论（「dshmarket 已更新到 1.61.0」）。清掉之后用户就永远看不到
-      // 成功与否 —— 之前就是这样，点了更新只看到进度一闪，然后什么都没有。
-      // 下一次操作开始时（函数体的开头）才会清空。
+      scheduleResultClear()
     }
   }
 
