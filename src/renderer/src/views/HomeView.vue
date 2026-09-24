@@ -66,7 +66,15 @@ const problems = computed(() =>
 const disablable = computed(() => problems.value.filter((p) => p.isPlugin))
 
 async function runCheck(): Promise<void> {
-  if (diagnosing.value || selected.value === '') return
+  // 这两个分支原本是静默 return —— 用户点了按钮却什么都没发生，必须给一句话
+  if (diagnosing.value) {
+    ui.showBubble(t('check.busy'))
+    return
+  }
+  if (selected.value === '') {
+    ui.showBubble(t('check.pickVersion'))
+    return
+  }
   diagnosing.value = true
   try {
     // 先取已装插件清单，用来判断 dsh 报出来的名字是不是"你的插件"

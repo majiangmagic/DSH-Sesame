@@ -9,6 +9,8 @@
  */
 const enUS: typeof zhCN = {
   check: {
+    busy: 'Already checking — one moment…',
+    pickVersion: 'Pick a version first',
   button: "Check",
   running: "Checking…",
   title: "Check result",

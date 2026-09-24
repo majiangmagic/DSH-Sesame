@@ -8,6 +8,8 @@
 export default {
   check: {
     button: "检查",
+    busy: "正在检查，请稍候…",
+    pickVersion: "先选一个版本再检查",
     running: "检查中…",
     title: "检查结果",
     ok: "没发现问题，这个版本能正常启动。",
