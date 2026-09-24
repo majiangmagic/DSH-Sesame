@@ -359,37 +359,43 @@
 
 /* 右上：品红偏紫，冷艳的那一侧。
  *
- * 尺寸与浓度是第三次调整的结果：原来是 92vmax / alpha 0.20 / 大半在屏幕外 ——
- * 平移那种柔光的观感只是"整片亮度微微变了"，眼睛读成静止，行程加到多大都没用。
- * 现在缩到 42vmax 并提高浓度、把核心挪进可视区，位移才表现为"一个亮团在屏幕上走"。
+ * 这一版是第四次调整，前三次的问题分别是：
+ *   1) 92vmax / alpha 0.20 / 大半在屏幕外 —— 平移它只是"整片亮度微微变了"，读成静止；
+ *   2) 两团往**相反方向**漂移 —— 合成重心互相抵消，实测质心变化 <1px，行程再大也没用；
+ *   3) 缩到 42vmax 并提速到 138px/秒后，用户仍觉得慢 —— 因为纯柔光渐变
+ *      （0% → 70% 全淡出）**没有可追踪的特征**，眼睛只能靠边缘亮度变化判断运动。
+ * 所以这一版：尺寸再缩到 32vmax，并在中心加一个更亮的**核心**（0.62 的亮品红），
+ * 让眼睛有一个能跟着走的点。周期 4.5s / 5.5s（实测 179px/秒、峰值 351）。
  */
 .backdrop-grid-mask::before {
-  width: 42vmax;
-  height: 42vmax;
+  width: 32vmax;
+  height: 32vmax;
   right: 4vmax;
   top: -6vmax;
   background: radial-gradient(
     circle,
-    rgba(217, 70, 239, 0.34) 0%,
-    rgba(217, 70, 239, 0.12) 42%,
-    transparent 70%
+    rgba(240, 120, 255, 0.62) 0%,
+    rgba(217, 70, 239, 0.34) 16%,
+    rgba(217, 70, 239, 0.13) 38%,
+    transparent 66%
   );
-  animation: neon-drift-a 7s ease-in-out infinite alternate;
+  animation: neon-drift-a 4.5s ease-in-out infinite alternate;
 }
 
 /* 左下：正紫，压住暗部 */
 .backdrop-grid-mask::after {
-  width: 40vmax;
-  height: 40vmax;
+  width: 30vmax;
+  height: 30vmax;
   left: 2vmax;
   bottom: -4vmax;
   background: radial-gradient(
     circle,
-    rgba(124, 58, 237, 0.38) 0%,
-    rgba(124, 58, 237, 0.14) 44%,
-    transparent 72%
+    rgba(158, 108, 255, 0.66) 0%,
+    rgba(124, 58, 237, 0.36) 18%,
+    rgba(124, 58, 237, 0.14) 40%,
+    transparent 68%
   );
-  animation: neon-drift-b 9s ease-in-out infinite alternate;
+  animation: neon-drift-b 5.5s ease-in-out infinite alternate;
 }
 
 /*
