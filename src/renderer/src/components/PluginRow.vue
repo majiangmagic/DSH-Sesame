@@ -74,7 +74,7 @@ function onToggle(event: Event): void {
 <template>
   <label
     class="toggle module-row"
-    :class="{ off: !plugin.enabled }"
+    :class="{ 'state-off': !plugin.enabled }"
     :title="title"
   >
     <span class="module-main">

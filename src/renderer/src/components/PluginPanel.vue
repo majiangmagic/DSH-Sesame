@@ -41,7 +41,7 @@ onMounted(() => {
       </div>
       <div class="module-sub" id="pluginSub">{{ subtitle }}</div>
     </div>
-    <button class="ghost" id="pluginRefresh" type="button" :disabled="store.loading" @click="store.load()">
+    <button class="subtle-button" id="pluginRefresh" type="button" :disabled="store.loading" @click="store.load()">
       {{ t('plugins.refresh') }}
     </button>
   </div>
@@ -56,5 +56,5 @@ onMounted(() => {
       @toggle="store.setEnabled"
     />
   </div>
-  <p class="hint" id="pluginHint">{{ store.error }}</p>
+  <p class="status-line" id="pluginHint">{{ store.error }}</p>
 </template>

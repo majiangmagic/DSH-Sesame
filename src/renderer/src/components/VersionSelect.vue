@@ -54,7 +54,7 @@ const triggerText = computed(() => {
 
 function scrollActiveIntoView(): void {
   void nextTick(() => {
-    panelEl.value?.querySelector('.picker-option.active')?.scrollIntoView({ block: 'nearest' })
+    panelEl.value?.querySelector('.picker-option.view-active')?.scrollIntoView({ block: 'nearest' })
   })
 }
 
@@ -145,7 +145,7 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown)
 </script>
 
 <template>
-  <div class="select" id="versionPicker" ref="rootEl" :class="{ open }">
+  <div class="picker" id="versionPicker" ref="rootEl" :class="{ 'state-open': open }">
     <button
       type="button"
       class="picker-trigger"
@@ -167,9 +167,9 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onPointerDown)
         :key="`${option.value}-${index}`"
         class="picker-option"
         :class="{
-          selected: option.value === modelValue,
-          more: option.more,
-          active: index === active
+          'option-selected': option.value === modelValue,
+          'expand-more': option.more,
+          'view-active': index === active
         }"
         :data-index="index"
         role="option"

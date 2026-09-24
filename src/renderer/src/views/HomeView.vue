@@ -82,8 +82,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div id="view-control" class="page active home-stack">
-    <div class="card home">
+  <div id="view-control" class="view view-active home-stack">
+    <div class="panel home">
       <div class="control-bar">
         <div class="control-main">
           <label for="versionTrigger">{{ t('home.versionLabel') }}</label>
@@ -94,15 +94,15 @@ onMounted(async () => {
             :placeholder="versions.loading ? t('home.loadingVersion') : t('home.noVersions')"
           />
         </div>
-        <div class="controls">
+        <div class="action-group">
           <!--
             只留主按钮（启动 / 停止）。原来的「更新」「重启」「卸载」已去掉：
             更新与卸载归到「版本」页（那里逐版本操作），重启可用「停止 → 启动」代替。
           -->
           <button
             class="action-button"
-            :class="[isRunning ? 'stop' : 'play', { loading: mainLoading }]"
-            id="main"
+            :class="[isRunning ? 'mode-stop' : 'mode-play', { 'busy': mainLoading }]"
+            id="primary-action"
             type="button"
             :disabled="versions.isBusy || selected === ''"
             :aria-label="isRunning ? t('home.actionStop') : t('home.actionStart')"
@@ -110,19 +110,19 @@ onMounted(async () => {
             @click="onMainAction"
           >
             <span class="spin" aria-hidden="true"></span>
-            <svg class="ico action-icon-play" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="glyph action-icon-play" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 fill="currentColor"
                 d="M7 5.9v12.2c0 .74.81 1.2 1.45.82l9.9-6.1a.96.96 0 0 0 0-1.64l-9.9-6.1A.96.96 0 0 0 7 5.9Z"
               />
             </svg>
-            <svg class="ico action-icon-stop" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="glyph action-icon-stop" viewBox="0 0 24 24" aria-hidden="true">
               <rect fill="currentColor" x="5" y="5" width="14" height="14" rx="2.6" />
             </svg>
           </button>
         </div>
       </div>
-      <p class="hint" id="hint">
+      <p class="status-line" id="status-line">
         <template v-if="showRunningLink">
           {{ t('status.running') }} ·
           <a :href="versions.running?.url ?? ''" target="_blank" rel="noreferrer">
@@ -135,7 +135,7 @@ onMounted(async () => {
     </div>
 
     <!-- 新增：插件开关（与插件页共用同一份数据；插件页本身保留不动） -->
-    <div class="card" id="homePlugins">
+    <div class="panel" id="homePlugins">
       <PluginPanel />
     </div>
   </div>

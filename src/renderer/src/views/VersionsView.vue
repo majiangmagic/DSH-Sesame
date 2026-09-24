@@ -12,8 +12,8 @@ import VersionManager from '@/components/VersionManager.vue'
 </script>
 
 <template>
-  <div id="view-releases" class="page active">
-    <div class="card versions">
+  <div id="view-releases" class="view view-active">
+    <div class="panel versions">
       <VersionManager />
     </div>
   </div>

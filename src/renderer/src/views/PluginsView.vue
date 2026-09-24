@@ -108,15 +108,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <div id="view-store" class="page active">
-    <div class="card plugins market">
+  <div id="view-store" class="view view-active">
+    <div class="panel module-panel market">
       <div class="module-head">
         <div>
           <div class="module-title">{{ t('market.title') }}</div>
           <div class="module-sub" id="marketSub">{{ subtitle }}</div>
         </div>
         <button
-          class="ghost"
+          class="subtle-button"
           id="marketRefresh"
           type="button"
           :disabled="market.loading"
@@ -137,7 +137,7 @@ onMounted(() => {
             @input="market.setQuery(($event.target as HTMLInputElement).value)"
           />
           <button
-            class="ghost market-sort"
+            class="subtle-button market-sort"
             id="marketSort"
             type="button"
             :title="t('market.sortHint')"
@@ -150,7 +150,7 @@ onMounted(() => {
           <button
             class="chip"
             type="button"
-            :class="{ on: market.category === '' }"
+            :class="{ 'state-enabled': market.category === '' }"
             @click="pickCategory('', $event)"
           >
             {{ t('market.allCategories') }}<span class="chip-n">{{ market.total }}</span>
@@ -160,7 +160,7 @@ onMounted(() => {
             :key="item.name"
             class="chip"
             type="button"
-            :class="{ on: market.category === item.name }"
+            :class="{ 'state-enabled': market.category === item.name }"
             @click="pickCategory(item.name, $event)"
           >
             {{ item.name }}<span class="chip-n">{{ item.count }}</span>
@@ -173,7 +173,7 @@ onMounted(() => {
         <div v-else-if="market.error" class="module-empty">{{ market.error }}</div>
         <div v-else-if="!market.visible.length" class="module-empty">
           <span>{{ t('market.noMatch') }}</span>
-          <button class="ghost" type="button" @click="clearFilters">{{ t('market.clearFilters') }}</button>
+          <button class="subtle-button" type="button" @click="clearFilters">{{ t('market.clearFilters') }}</button>
         </div>
         <div
           v-for="plugin in market.visible"
@@ -221,7 +221,7 @@ onMounted(() => {
           <div class="market-actions">
             <button
               v-if="plugin.page"
-              class="ghost"
+              class="subtle-button"
               type="button"
               :title="t('market.openPage')"
               @click="openLink(plugin.page)"
@@ -230,7 +230,7 @@ onMounted(() => {
             </button>
             <button
               v-if="plugin.url"
-              class="ghost"
+              class="subtle-button"
               type="button"
               :title="t('market.openRepo')"
               @click="openLink(plugin.url)"
@@ -240,7 +240,7 @@ onMounted(() => {
             <!-- 已装 → 卸载；未装 → 下载。入参一律是真 npm 包名（identityOf） -->
             <button
               v-if="market.isInstalled(plugin)"
-              class="ghost danger"
+              class="subtle-button danger"
               type="button"
               :disabled="market.busyName === identityOf(plugin)"
               :title="t('market.uninstallTitle', { command: `dsh plugin --profile web remove ${identityOf(plugin)}` })"
@@ -252,7 +252,7 @@ onMounted(() => {
             </button>
             <button
               v-else
-              class="ghost"
+              class="subtle-button"
               type="button"
               :disabled="market.busyName === identityOf(plugin)"
               :title="t('market.installTitle', { command: installCommand(plugin) })"
@@ -265,7 +265,7 @@ onMounted(() => {
       </div>
 
       <div class="market-foot">
-        <p class="hint" id="marketHint">
+        <p class="status-line" id="marketHint">
           <!-- 正在安装/卸载时优先显示主进程推回来的 pnpm 输出行，否则显示计数 -->
           <template v-if="market.progressText">{{ market.progressText }}</template>
           <template v-else-if="market.canLoadMore">
@@ -275,7 +275,7 @@ onMounted(() => {
         </p>
         <button
           v-if="market.canLoadMore"
-          class="ghost"
+          class="subtle-button"
           id="marketMore"
           type="button"
           @click="market.loadMore()"
@@ -288,7 +288,7 @@ onMounted(() => {
         目录只收录了一部分插件，所以"已装 N 个"会小于 profile 里的实际数量。
         不说明的话看起来像漏算，所以把未被收录的那几个点名出来。
       -->
-      <p v-if="market.unlistedInstalled.length" class="hint market-unlisted" id="marketUnlisted">
+      <p v-if="market.unlistedInstalled.length" class="status-line market-unlisted" id="marketUnlisted">
         {{ t('market.unlisted', { count: market.unlistedInstalled.length, names: market.unlistedInstalled.join('、') }) }}
       </p>
     </div>

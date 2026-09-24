@@ -33,7 +33,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="ask" id="ask">
+  <div class="confirm-layer" id="confirm-layer">
     <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="askTitle">
       <h2 class="confirm-title" id="askTitle">{{ t('modal.updateAvailable') }}</h2>
       <div class="confirm-items" id="askItems">
@@ -49,10 +49,10 @@ onMounted(() => {
       <p class="confirm-note" id="askNote" hidden></p>
       <ProgressBar :visible="busy" :percent="null" />
       <div class="confirm-actions" id="askActions">
-        <button v-if="pending" type="button" class="primary" :disabled="busy" @click="versions.update()">
+        <button v-if="pending" type="button" class="main-button" :disabled="busy" @click="versions.update()">
           {{ t('ask.updateTo', { latest: pending.to }) }}
         </button>
-        <button type="button" class="ghost" id="askSkip" @click="emit('close')">
+        <button type="button" class="subtle-button" id="askSkip" @click="emit('close')">
           {{ t('modal.notNow') }}
         </button>
       </div>

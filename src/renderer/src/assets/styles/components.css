@@ -8,7 +8,7 @@
 /* ---- 背景层：看板娘立绘、氛围光斑与浮动尘埃 ---- */
 
 /* 高清角色独立成层，仅动画 transform / opacity，保留文字区域的对比度。 */
-.backdrop {
+.stage {
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -16,14 +16,14 @@
   z-index: 0;
 }
 
-.backdrop::before,
-.backdrop::after {
+.stage::before,
+.stage::after {
   content: "";
   position: absolute;
   border-radius: 50%;
 }
 
-.backdrop::before {
+.stage::before {
   width: 65vmax;
   height: 65vmax;
   right: -25vmax;
@@ -32,7 +32,7 @@
   animation: ambient-drift 18s ease-in-out infinite alternate;
 }
 
-.backdrop::after {
+.stage::after {
   left: 7%;
   bottom: 12%;
   width: 4px;
@@ -74,15 +74,15 @@
 }
 
 html.motion-paused .stage-portrait,
-html.motion-paused .backdrop::before,
-html.motion-paused .backdrop::after {
+html.motion-paused .stage::before,
+html.motion-paused .stage::after {
   animation-play-state: paused;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .stage-portrait,
-  .backdrop::before,
-  .backdrop::after {
+  .stage::before,
+  .stage::after {
     animation: none;
   }
 }
@@ -139,7 +139,7 @@ html.motion-paused .backdrop::after {
 
 /* ---- 顶栏右侧：导航激活态、Star 链接与窗口控制按钮 ---- */
 
-nav button.active {
+nav button.view-active {
   color: #fff;
 }
 
@@ -215,7 +215,7 @@ nav button.active {
   color: var(--accent);
 }
 
-.titlebar-button.close:hover {
+.titlebar-button.dismiss:hover {
   background: var(--danger);
   color: #fff;
 }
@@ -227,20 +227,20 @@ nav button.active {
 
 /* ---- 页面容器与标签页切换动画 ---- */
 
-.page {
+.view {
   display: none;
   height: 100%;
 }
 
-.page.active {
+.view.view-active {
   display: flex;
 }
 
-.page.view-enter-next {
+.view.view-enter-next {
   animation: view-enter-next 320ms cubic-bezier(.22, 1, .36, 1) both;
 }
 
-.page.view-enter-prev {
+.view.view-enter-prev {
   animation: view-enter-prev 320ms cubic-bezier(.22, 1, .36, 1) both;
 }
 
@@ -272,8 +272,8 @@ nav button.active {
     transition: none;
   }
 
-  .page.view-enter-next,
-  .page.view-enter-prev {
+  .view.view-enter-next,
+  .view.view-enter-prev {
     animation: none;
   }
 }
@@ -288,7 +288,7 @@ nav button.active {
 
 /* ---- 卡片布局与首页表单栏 ---- */
 
-.card {
+.panel {
   width: min(640px, 100%);
   background: var(--card);
   border: 1px solid var(--line);
@@ -297,11 +297,11 @@ nav button.active {
   box-shadow: 0 12px 32px rgba(59, 111, 224, 0.10);
 }
 
-.card.settings {
+.panel.preferences {
   width: min(560px, 100%);
 }
 
-.card.plugins {
+.panel.module-panel {
   width: min(720px, 100%);
   max-height: 100%;
   display: flex;
@@ -309,7 +309,7 @@ nav button.active {
   min-height: 0;
 }
 
-.card.settings .toggle:first-child {
+.panel.preferences .toggle:first-child {
   margin-top: 0;
 }
 
@@ -337,7 +337,7 @@ nav button.active {
     flex: 1 1 100%;
   }
 
-  .controls {
+  .action-group {
     margin-left: auto;
   }
 }
@@ -345,7 +345,7 @@ nav button.active {
 /* ---- 设置项：字段行与高级设置折叠区 ---- */
 
 /* 设置页的行：标题在左、控件在右，跟开关同一套节奏 */
-.field {
+.form-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -354,15 +354,15 @@ nav button.active {
   font-size: 14px;
 }
 
-.field input {
+.form-row input {
   width: 104px;
   flex: 0 0 auto;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.field input::-webkit-outer-spin-button,
-.field input::-webkit-inner-spin-button {
+.form-row input::-webkit-outer-spin-button,
+.form-row input::-webkit-inner-spin-button {
   appearance: none;
   margin: 0;
 }
@@ -407,28 +407,28 @@ nav button.active {
   color: var(--text);
 }
 
-.extra-options .field {
+.extra-options .form-row {
   margin: 12px 0 0;
 }
 
 /* 高级设置里的控件比主表单矮一档，三行看着才不散 */
-.extra-options .field input,
-.extra-options .field select {
+.extra-options .form-row input,
+.extra-options .form-row select {
   padding: 9px 12px;
   border-radius: 10px;
   font-size: 13px;
 }
 
-.extra-options .field input[type=number] {
+.extra-options .form-row input[type=number] {
   padding-right: 12px;
 }
 
 /* 版本目录是长路径，单独占一整行 */
-.extra-options .field.wide {
+.extra-options .form-row.wide {
   display: block;
 }
 
-.extra-options .field.wide > span {
+.extra-options .form-row.wide > span {
   display: block;
   margin-bottom: 8px;
   color: var(--muted);
@@ -436,19 +436,19 @@ nav button.active {
   letter-spacing: 0.08em;
 }
 
-.extra-options .field.wide input {
+.extra-options .form-row.wide input {
   width: 100%;
   text-align: left;
   font-variant-numeric: normal;
 }
 
-.extra-options .field.wide .inline-input {
+.extra-options .form-row.wide .inline-input {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.extra-options .field.wide .inline-input input {
+.extra-options .form-row.wide .inline-input input {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -458,7 +458,7 @@ nav button.active {
   height: 34px;
 }
 
-.extra-options .hint {
+.extra-options .status-line {
   margin: 8px 0 0;
   font-size: 12px;
 }
@@ -466,7 +466,7 @@ nav button.active {
 /* ---- 自绘版本下拉（select） ---- */
 
 /* 版本下拉：原生 select 的弹出列表没法跟随页面配色，这里整套自绘 */
-.select {
+.picker {
   position: relative;
 }
 
@@ -501,7 +501,7 @@ nav button.active {
   cursor: not-allowed;
 }
 
-.select.open .picker-trigger {
+.picker.state-open .picker-trigger {
   border-color: var(--accent);
   background: #f8fbff;
 }
@@ -522,7 +522,7 @@ nav button.active {
   transition: transform 0.16s ease;
 }
 
-.select.open .picker-caret {
+.picker.state-open .picker-caret {
   transform: rotate(180deg);
 }
 
@@ -573,16 +573,16 @@ nav button.active {
   margin-top: 1px;
 }
 
-.picker-option.active {
+.picker-option.view-active {
   background: var(--accent-soft);
 }
 
-.picker-option.selected {
+.picker-option.option-selected {
   background: var(--accent-dim);
   color: var(--accent);
 }
 
-.picker-option.selected .picker-option-name {
+.picker-option.option-selected .picker-option-name {
   font-weight: 600;
 }
 
@@ -603,12 +603,12 @@ nav button.active {
   padding: 2px 8px;
 }
 
-.picker-option.selected .picker-option-badge {
+.picker-option.option-selected .picker-option-badge {
   color: var(--accent);
   border-color: #b9ccf0;
 }
 
-.picker-option.more {
+.picker-option.expand-more {
   justify-content: center;
   color: var(--muted);
   font-size: 13px;
@@ -617,7 +617,7 @@ nav button.active {
   border-radius: 0 0 9px 9px;
 }
 
-.picker-option.more.active {
+.picker-option.expand-more.view-active {
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -678,24 +678,24 @@ nav button.active {
 
 /* ---- 提示文本与进度条 ---- */
 
-.hint {
+.status-line {
   color: var(--muted);
   font-size: 13px;
   margin: 12px 0 0;
   min-height: 1.5em;
 }
 
-.hint a {
+.status-line a {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.card.settings .hint:empty {
+.panel.preferences .status-line:empty {
   display: none;
 }
 
-.progress {
+.progress-shell {
   margin-top: 12px;
   height: 4px;
   background: #dbe5fb;
@@ -703,7 +703,7 @@ nav button.active {
   overflow: hidden;
 }
 
-.progress[hidden] {
+.progress-shell[hidden] {
   display: none;
 }
 
@@ -715,7 +715,7 @@ nav button.active {
   transition: width 0.15s ease;
 }
 
-.progress.indeterminate .progress-track {
+.progress-shell.progress-indeterminate .progress-track {
   width: 32%;
   animation: progress-slide 1.1s ease-in-out infinite;
 }
@@ -731,7 +731,7 @@ nav button.active {
 
 /* ---- 主按钮、控制按钮与加载动画 ---- */
 
-.primary {
+.main-button {
   width: 100%;
   border: 0;
   background: var(--accent);
@@ -746,21 +746,21 @@ nav button.active {
   gap: 8px;
 }
 
-.primary:hover:not(:disabled) {
+.main-button:hover:not(:disabled) {
   background: #3462cb;
 }
 
-.primary:disabled {
+.main-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
 
-.primary.loading {
+.main-button.busy {
   opacity: 1;
   cursor: wait;
 }
 
-.controls {
+.action-group {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -784,19 +784,19 @@ nav button.active {
   height: 20px;
 }
 
-.action-button .ico {
+.action-button .glyph {
   display: none;
 }
 
-.action-button.play:not(.loading) .action-icon-play {
+.action-button.mode-play:not(.busy) .action-icon-play {
   display: block;
 }
 
-.action-button.stop:not(.loading) .action-icon-stop {
+.action-button.mode-stop:not(.busy) .action-icon-stop {
   display: block;
 }
 
-#main.action-button {
+#primary-action.action-button {
   width: 46px;
   flex: 0 0 auto;
   border: 0;
@@ -804,40 +804,40 @@ nav button.active {
   color: #fff;
 }
 
-#main.action-button:hover:not(:disabled) {
+#primary-action.action-button:hover:not(:disabled) {
   background: #3462cb;
 }
 
-#main.action-button.stop {
+#primary-action.action-button.mode-stop {
   background: #fff1f2;
   color: var(--danger);
   border: 1px solid #f7ccd2;
 }
 
-#main.action-button.stop:hover {
+#primary-action.action-button.mode-stop:hover {
   background: #ffe7ea;
 }
 
-#restart.action-button,
-#update.action-button,
-#remove.action-button {
+#restart-action.action-button,
+#update-action.action-button,
+#uninstall-action.action-button {
   border: 1px solid var(--line);
   background: #fff;
   color: var(--accent);
 }
 
-#restart.action-button:hover:not(:disabled),
-#update.action-button:hover:not(:disabled),
-#remove.action-button:hover:not(:disabled) {
+#restart-action.action-button:hover:not(:disabled),
+#update-action.action-button:hover:not(:disabled),
+#uninstall-action.action-button:hover:not(:disabled) {
   background: var(--accent-soft);
   border-color: #b9ccf0;
 }
 
-#remove.action-button {
+#uninstall-action.action-button {
   color: var(--muted);
 }
 
-#remove.action-button:hover:not(:disabled) {
+#uninstall-action.action-button:hover:not(:disabled) {
   background: #fff1f2;
   border-color: #f7ccd2;
   color: var(--danger);
@@ -847,7 +847,7 @@ nav button.active {
   display: none;
 }
 
-.action-button.loading svg {
+.action-button.busy svg {
   display: none;
 }
 
@@ -861,8 +861,8 @@ nav button.active {
   animation: spin 0.65s linear infinite;
 }
 
-.action-button.loading .spin,
-.primary.loading .spin {
+.action-button.busy .spin,
+.main-button.busy .spin {
   display: block;
 }
 
@@ -893,7 +893,7 @@ nav button.active {
   font: inherit;
 }
 
-#log {
+#console-output {
   flex: 1;
   margin: 0;
   overflow: auto;
@@ -929,7 +929,7 @@ nav button.active {
   margin-top: 3px;
 }
 
-.ghost {
+.subtle-button {
   border: 1px solid #c7d8f7;
   background: #fff;
   color: var(--accent);
@@ -941,12 +941,12 @@ nav button.active {
   flex: 0 0 auto;
 }
 
-.ghost:hover:not(:disabled) {
+.subtle-button:hover:not(:disabled) {
   background: var(--accent-soft);
   border-color: #b9ccf0;
 }
 
-.ghost:disabled {
+.subtle-button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -978,12 +978,12 @@ nav button.active {
   border-bottom: 0;
 }
 
-.module-row.off .module-name {
+.module-row.state-off .module-name {
   color: var(--muted);
   font-weight: 500;
 }
 
-.module-row.off .module-meta {
+.module-row.state-off .module-meta {
   opacity: 0.75;
 }
 
@@ -1025,27 +1025,27 @@ nav button.active {
 /* 细滚动条：默认亮灰条在浅色面板上太抢眼，统一成淡蓝灰 */
 .picker-panel,
 .module-list,
-#log {
+#console-output {
   scrollbar-width: thin;
   scrollbar-color: #c3d3ee transparent;
 }
 
 .picker-panel::-webkit-scrollbar,
 .module-list::-webkit-scrollbar,
-#log::-webkit-scrollbar {
+#console-output::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .picker-panel::-webkit-scrollbar-track,
 .module-list::-webkit-scrollbar-track,
-#log::-webkit-scrollbar-track {
+#console-output::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .picker-panel::-webkit-scrollbar-thumb,
 .module-list::-webkit-scrollbar-thumb,
-#log::-webkit-scrollbar-thumb {
+#console-output::-webkit-scrollbar-thumb {
   background: #c3d3ee;
   border-radius: 999px;
   border: 2px solid transparent;
@@ -1054,7 +1054,7 @@ nav button.active {
 
 .picker-panel::-webkit-scrollbar-thumb:hover,
 .module-list::-webkit-scrollbar-thumb:hover,
-#log::-webkit-scrollbar-thumb:hover {
+#console-output::-webkit-scrollbar-thumb:hover {
   background: #a3bcea;
   background-clip: content-box;
 }
@@ -1062,7 +1062,7 @@ nav button.active {
 /* ---- 更新询问遮罩弹窗 ---- */
 
 /* 开机自启时若检测到新版本：先问用户，答案出来之前不启动 dsh */
-.ask {
+.confirm-layer {
   position: fixed;
   inset: 0;
   z-index: 30;
@@ -1073,7 +1073,7 @@ nav button.active {
   background: rgba(22, 35, 61, 0.36);
 }
 
-.ask[hidden] {
+.confirm-layer[hidden] {
   display: none;
 }
 
@@ -1203,7 +1203,7 @@ nav button.active {
   line-height: 1.55;
 }
 
-/* 更新与暂不更新并排：首页的 .primary 是通栏主按钮，这里要按内容收窄 */
+/* 更新与暂不更新并排：首页的 .main-button 是通栏主按钮，这里要按内容收窄 */
 .confirm-actions {
   display: flex;
   justify-content: flex-end;
@@ -1214,8 +1214,8 @@ nav button.active {
   flex: 0 0 auto;
 }
 
-.confirm-actions .primary,
-.confirm-actions .ghost {
+.confirm-actions .main-button,
+.confirm-actions .subtle-button {
   width: auto;
   flex: 0 0 auto;
   font-size: 13px;
@@ -1236,7 +1236,7 @@ nav button.active {
 /* ---- 页面内提示遮罩 ---- */
 
 /* 页面内提示：原生 alert 在 app 窗口里是系统弹窗，风格割裂 */
-#notice {
+#banner {
   z-index: 40;
 }
 
@@ -1255,7 +1255,7 @@ nav button.active {
 /* ---- 退出告别页 ---- */
 
 /* 托盘退出后：浏览器不一定会让脚本关标签页，那就换一张干净的告别页 */
-.gone {
+.empty-layer {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -1267,7 +1267,7 @@ nav button.active {
   text-align: center;
 }
 
-.gone[hidden] {
+.empty-layer[hidden] {
   display: none;
 }
 

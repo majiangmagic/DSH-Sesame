@@ -70,13 +70,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div id="view-preferences" class="page active">
-    <div class="card settings" v-if="draft">
+  <div id="view-preferences" class="view view-active">
+    <div class="panel preferences" v-if="draft">
       <div class="settings-head">
         <SampleTag v-if="SAMPLE_DATA.settings" />
       </div>
 
-      <label class="field">
+      <label class="form-row">
         <span>{{ t('settings.profile') }}</span>
         <select id="profile" v-model="draft.profile">
           <option v-for="item in PROFILES" :key="item.value" :value="item.value" :disabled="!item.available">
@@ -90,7 +90,7 @@ onMounted(async () => {
         <input id="autoStart" type="checkbox" v-model="draft.autoStart" />
       </label>
 
-      <label class="field">
+      <label class="form-row">
         <span>{{ t('settings.uiLang') }}</span>
         <select id="uiLang" v-model="draft.lang">
           <option value="zh">中文</option>
@@ -98,7 +98,7 @@ onMounted(async () => {
         </select>
       </label>
 
-      <label class="field wide">
+      <label class="form-row wide">
         <span>{{ t('settings.args') }}</span>
         <input
           id="args"
@@ -109,9 +109,9 @@ onMounted(async () => {
           v-model="draft.args"
         />
       </label>
-      <p class="hint">{{ t('settings.argsHint') }}</p>
+      <p class="status-line">{{ t('settings.argsHint') }}</p>
 
-      <label class="field">
+      <label class="form-row">
         <span>{{ t('settings.profile') }}</span>
         <select id="profile" v-model="draft.profile">
           <option v-for="item in PROFILES" :key="item.value" :value="item.value" :disabled="!item.available">
@@ -120,10 +120,10 @@ onMounted(async () => {
         </select>
       </label>
 
-      <button class="primary" id="saveSettings" type="button" style="margin-top: 22px" @click="save">
+      <button class="main-button" id="saveSettings" type="button" style="margin-top: 22px" @click="save">
         {{ t('settings.save') }}
       </button>
-      <p class="hint" id="settingsHint">{{ savedHint }}</p>
+      <p class="status-line" id="settingsHint">{{ savedHint }}</p>
     </div>
   </div>
 </template>

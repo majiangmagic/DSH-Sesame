@@ -18,7 +18,7 @@ withDefaults(
 </script>
 
 <template>
-  <div class="progress" :class="{ indeterminate: percent === null }" :hidden="!visible">
+  <div class="progress-shell" :class="{ 'progress-indeterminate': percent === null }" :hidden="!visible">
     <div
       class="progress-track"
       :style="percent === null ? undefined : { width: `${Math.max(0, Math.min(100, percent))}%` }"

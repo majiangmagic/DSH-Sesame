@@ -53,7 +53,7 @@ function close(): void {
     </button>
     <button
       type="button"
-      class="titlebar-button close"
+      class="titlebar-button dismiss"
       id="winClose"
       :title="t('window.close')"
       :aria-label="t('window.close')"

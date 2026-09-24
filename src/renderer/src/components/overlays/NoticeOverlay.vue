@@ -14,12 +14,12 @@ const emit = defineEmits<{ close: [] }>()
 </script>
 
 <template>
-  <div class="ask" id="notice">
+  <div class="confirm-layer" id="banner">
     <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="noticeTitle">
       <h2 class="confirm-title" id="noticeTitle">{{ t('modal.actionFailed') }}</h2>
       <p class="banner-text" id="noticeText">{{ text }}</p>
       <div class="confirm-actions">
-        <button type="button" class="primary" id="noticeOk" @click="emit('close')">
+        <button type="button" class="main-button" id="noticeOk" @click="emit('close')">
           {{ t('modal.ok') }}
         </button>
       </div>

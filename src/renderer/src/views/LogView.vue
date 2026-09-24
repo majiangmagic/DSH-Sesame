@@ -51,10 +51,10 @@ onBeforeUnmount(() => off?.())
 </script>
 
 <template>
-  <div id="view-console" class="page active">
+  <div id="view-console" class="view view-active">
     <div class="log-toolbar">
       <button type="button" id="clear" @click="clear">{{ t('log.clear') }}</button>
     </div>
-    <pre id="log" ref="preEl">{{ lines.join('\n') }}</pre>
+    <pre id="console-output" ref="preEl">{{ lines.join('\n') }}</pre>
   </div>
 </template>

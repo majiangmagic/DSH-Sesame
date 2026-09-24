@@ -11,7 +11,7 @@
 </script>
 
 <template>
-  <div class="backdrop" aria-hidden="true">
+  <div class="stage" aria-hidden="true">
     <div class="backdrop-grid-mask"></div>
   </div>
 </template>

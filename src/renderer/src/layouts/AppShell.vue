@@ -42,7 +42,7 @@ let lastIndex = Math.max(0, TABS.findIndex((tab) => tab.path === route.path))
 function movePill(): void {
   const nav = navEl.value
   if (!nav) return
-  const active = nav.querySelector<HTMLButtonElement>('button.active')
+  const active = nav.querySelector<HTMLButtonElement>('button.view-active')
   if (!active) return
   nav.style.setProperty('--tab-x', `${active.offsetLeft}px`)
   nav.style.setProperty('--tab-width', `${active.offsetWidth}px`)
@@ -89,7 +89,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onResize))
         <button
           v-for="tab in TABS"
           :key="tab.path"
-          :class="{ active: route.path === tab.path }"
+          :class="{ 'view-active': route.path === tab.path }"
           @click="router.push(tab.path)"
         >
           {{ t(tab.label) }}

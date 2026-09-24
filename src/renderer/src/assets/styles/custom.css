@@ -27,13 +27,13 @@
 }
 
 /* 三张卡片同宽并居中；比原版单卡（640）略宽，给版本行放得下版本号 + 按钮 */
-#view-control.home-stack > .card {
+#view-control.home-stack > .panel {
   width: min(720px, 100%);
   margin: 0 auto;
   flex: 0 0 auto;
 }
 
-/* 卡片内的列表不再受 .card.plugins 的 max-height 约束（首页用的是普通 .card） */
+/* 卡片内的列表不再受 .panel.module-panel 的 max-height 约束（首页用的是普通 .panel） */
 #view-control .module-list {
   max-height: none;
 }
@@ -50,8 +50,8 @@
   padding: 24px;
 }
 
-/* 与 .card.plugins 同样的约束：撑满可用高度，列表在卡片内部滚动 */
-.card.versions {
+/* 与 .panel.module-panel 同样的约束：撑满可用高度，列表在卡片内部滚动 */
+.panel.versions {
   width: min(720px, 100%);
   max-height: 100%;
   display: flex;
@@ -140,12 +140,12 @@
 
 /* ---- 危险动作按钮（卸载） ---- */
 
-.ghost.danger {
+.subtle-button.danger {
   color: var(--danger);
   border-color: #f7ccd2;
 }
 
-.ghost.danger:hover:not(:disabled) {
+.subtle-button.danger:hover:not(:disabled) {
   background: #fff1f2;
   border-color: #f0b8c2;
 }
@@ -207,7 +207,7 @@
   border-color: var(--accent);
 }
 
-.chip.on {
+.chip.state-enabled {
   color: #fff;
   background: var(--accent);
   border-color: var(--accent);
@@ -277,7 +277,7 @@
 }
 
 /* 「没有匹配」那一格是纵向的（一句提示 + 一个清空按钮） */
-.module-empty .ghost {
+.module-empty .subtle-button {
   margin-top: 10px;
 }
 
@@ -319,7 +319,7 @@
 
 /* ---- 背景层：网格 + 氛围光 + 紫色霓虹 ---- */
 
-.backdrop {
+.stage {
   /* 网格：一格 44px，极低不透明度，只在暗底上看得见一点结构感。
      线色偏紫（原来是偏蓝的 rgba(122,166,255)），是霓虹感最省的一处改动 ——
      它铺满全屏，色调一偏，整体冷暖就跟着变。 */
@@ -407,7 +407,7 @@
 }
 
 /* 左上那团：从偏青的蓝改成偏紫的蓝，和右下呼应成一个冷紫系 */
-.backdrop::before {
+.stage::before {
   width: 78vmax;
   height: 78vmax;
   right: -30vmax;
@@ -418,7 +418,7 @@
 }
 
 /* 星点：蓝紫混着来，纯蓝会显得是"星空"而不是"霓虹"；并且各自明灭 */
-.backdrop::after {
+.stage::after {
   left: 7%;
   bottom: 12%;
   width: 4px;
@@ -475,8 +475,8 @@ body::after {
  * 这类用户对缓慢漂移/呼吸也会不适，所以不是"降速"而是"全停"。
  */
 @media (prefers-reduced-motion: reduce) {
-  .backdrop::before,
-  .backdrop::after,
+  .stage::before,
+  .stage::after,
   .backdrop-grid-mask::before,
   .backdrop-grid-mask::after {
     animation: none;
@@ -484,13 +484,13 @@ body::after {
 }
 
 /* 卡片描边从"蓝灰"改成"蓝紫"，让它看起来是被霓虹照亮而不是灰框 */
-.card {
+.panel {
   border-color: rgba(150, 140, 255, 0.16);
 }
 
 /* ---- 磨砂玻璃卡片 ---- */
 
-.card {
+.panel {
   /* 半透明底(令牌) + 背景模糊 = 磨砂玻璃 */
   backdrop-filter: blur(20px) saturate(150%);
   -webkit-backdrop-filter: blur(20px) saturate(150%);
@@ -679,7 +679,7 @@ select {
   white-space: nowrap;
 }
 
-/* 底部一行：左侧计数提示（.hint 自带 margin-top:auto 会把 foot 顶到底部），右侧「加载更多」 */
+/* 底部一行：左侧计数提示（.status-line 自带 margin-top:auto 会把 foot 顶到底部），右侧「加载更多」 */
 .market-foot {
   display: flex;
   gap: 10px;
@@ -688,13 +688,13 @@ select {
   padding-top: 8px;
 }
 
-.market-foot .hint {
+.market-foot .status-line {
   margin: 0;
   flex: 1;
   min-width: 0;
 }
 
-.market-foot .ghost {
+.market-foot .subtle-button {
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -731,7 +731,7 @@ select {
   background: rgba(22, 32, 52, 0.95);
   border-color: rgba(122, 166, 255, 0.45);
 }
-.select.open .picker-trigger {
+.picker.state-open .picker-trigger {
   background: rgba(13, 20, 36, 0.98);
 }
 .picker-panel {
@@ -740,33 +740,33 @@ select {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
-.picker-option.active {
+.picker-option.view-active {
   background: rgba(77, 141, 255, 0.14);
 }
-.picker-option.selected {
+.picker-option.option-selected {
   background: rgba(77, 141, 255, 0.2);
 }
-.picker-option.selected .picker-option-badge {
+.picker-option.option-selected .picker-option-badge {
   border-color: rgba(122, 166, 255, 0.45);
 }
 
-/* ---- 幽灵按钮（.ghost）——「刷新」这类小按钮，原本是白底 ---- */
-.ghost {
+/* ---- 幽灵按钮（.subtle-button）——「刷新」这类小按钮，原本是白底 ---- */
+.subtle-button {
   background: rgba(18, 27, 45, 0.9);
   border-color: rgba(122, 166, 255, 0.32);
   color: #9dc0ff;
 }
-.ghost:hover:not(:disabled) {
+.subtle-button:hover:not(:disabled) {
   background: rgba(77, 141, 255, 0.18);
   border-color: rgba(122, 166, 255, 0.5);
 }
 
 /* 危险操作（卸载）用红色调，别再落回浅底的粉 */
-.ghost.danger {
+.subtle-button.danger {
   color: #ff9aa6;
   border-color: rgba(255, 122, 138, 0.34);
 }
-.ghost.danger:hover:not(:disabled) {
+.subtle-button.danger:hover:not(:disabled) {
   background: rgba(255, 90, 110, 0.16);
   border-color: rgba(255, 122, 138, 0.55);
 }
@@ -778,9 +778,9 @@ select {
  * （版本选择器是自绘的 listbox，见上面的 `.select-*` 一段 —— 两者不是同一个东西，
  *   这也是为什么先前修了下拉框、设置页这两个仍然是白的。）
  */
-.settings select,
-.settings input[type='text'],
-.settings input[type='number'] {
+.preferences select,
+.preferences input[type='text'],
+.preferences input[type='number'] {
   background: rgba(13, 20, 36, 0.92);
   color: var(--text);
   border: 1px solid var(--line);
@@ -790,22 +790,22 @@ select {
 }
 
 /* 展开后的列表由系统绘制，暗色下要显式给 option 上色，否则仍是白底黑字 */
-.settings select option {
+.preferences select option {
   background: #0d1424;
   color: var(--text);
 }
 
 /* 不可选项（profile 的 tui 占位）要明显看出"现在不能用" */
-.settings select option:disabled {
+.preferences select option:disabled {
   color: #5c6b86;
 }
 
-.settings input::placeholder {
+.preferences input::placeholder {
   color: #6b7d9c;
 }
 
-.settings select:focus-visible,
-.settings input:focus-visible {
+.preferences select:focus-visible,
+.preferences input:focus-visible {
   outline: 1px solid var(--accent);
   outline-offset: 1px;
 }
@@ -867,7 +867,7 @@ select {
  *
  * 这三条原本在 mascot.css（那份看板娘样式表）里。删掉它时必须迁过来，否则：
  *   · 没有 z-index —— 无边框窗口的标题栏与页面内容会被背景层盖住；
- *   · 没有 pointer-events —— .page 会吃掉鼠标事件，卡片里的按钮点不动。
+ *   · 没有 pointer-events —— .view 会吃掉鼠标事件，卡片里的按钮点不动。
  */
 header,
 main {
@@ -875,23 +875,23 @@ main {
 }
 
 main,
-.page {
+.view {
   pointer-events: none;
 }
 
-.page > * {
+.view > * {
   pointer-events: auto;
 }
 
 /* ---- 这两层氛围光是关闭状态（刻意保留关闭）----
  *
- * `.backdrop::before`（呼吸光晕）与 `.backdrop::after`（星点）的样式在上面，
+ * `.stage::before`（呼吸光晕）与 `.stage::after`（星点）的样式在上面，
  * 但它们一直被 mascot.css 里的一句 `display: none` 关着 —— 也就是说**从未渲染过**。
  * 删掉那份样式表后必须把这条抑制原样迁过来，否则两层光会突然出现、界面就变了。
  *
  * 想放它们出来：删掉下面这条 display 即可（样式已经写好，直接生效）。
  */
-.backdrop::before,
-.backdrop::after {
+.stage::before,
+.stage::after {
   display: none;
 }

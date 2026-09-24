@@ -79,7 +79,7 @@ onMounted(() => {
       <div class="module-sub" id="versionSub">{{ subtitle }}</div>
     </div>
     <button
-      class="ghost"
+      class="subtle-button"
       id="versionRefresh"
       type="button"
       :disabled="store.loading || store.isBusy"
@@ -106,7 +106,7 @@ onMounted(() => {
       </span>
       <button
         v-if="row.installed"
-        class="ghost danger"
+        class="subtle-button danger"
         type="button"
         :disabled="!canUninstall(row)"
         :title="uninstallTitle(row)"
@@ -116,7 +116,7 @@ onMounted(() => {
       </button>
       <button
         v-else
-        class="ghost"
+        class="subtle-button"
         type="button"
         :disabled="store.isBusy"
         @click="store.install(row.version)"
@@ -126,7 +126,7 @@ onMounted(() => {
     </div>
   </div>
 
-  <p class="hint" id="versionHint">
+  <p class="status-line" id="versionHint">
     <template v-if="store.error">{{ store.error }}</template>
     <template v-else-if="store.busy && store.progressText">{{ store.progressText }}</template>
     <template v-else-if="store.remoteError">
