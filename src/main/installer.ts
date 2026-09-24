@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { decodeChunk } from './textDecode'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { versionBin, versionDir } from './paths'
@@ -107,7 +108,7 @@ function run(
 
     let buffer = ''
     const consume = (chunk: Buffer): void => {
-      buffer += chunk.toString('utf8')
+      buffer += decodeChunk(chunk)
       const lines = buffer.split(/\r?\n/)
       buffer = lines.pop() ?? ''
       for (const line of lines) {

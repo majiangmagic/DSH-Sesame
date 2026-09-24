@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
+import { decodeChunk } from './textDecode'
 import { existsSync, mkdirSync } from 'node:fs'
 import type { VersionStatus } from '@shared/versions'
 import { dshHome, profileDir } from './dshHome'
@@ -86,7 +87,11 @@ function envFor(version: string, node: { path: string }, profile: string): NodeJ
     ]
       .filter(Boolean)
       .join(' '),
-    npm_config_ignore_workspace_root_check: 'true'
+    npm_config_ignore_workspace_root_check: 'true',
+    // Windows 上 Python 默认按控制台代码页写输出（中文 = GBK），终端页因此出现乱码。
+    // 这两个变量让它直接输出 UTF-8（实测：Blender / Unity 的 MCP 服务都是 Python）。
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONUTF8: '1'
   }
 }
 
@@ -169,7 +174,7 @@ function attach(version: string, child: ChildProcess): Proc {
   current = proc
 
   const onChunk = (buf: Buffer): void => {
-    for (const line of buf.toString('utf8').split(/\r?\n/)) {
+    for (const line of decodeChunk(buf).split(/\r?\n/)) {
       if (line.trim() !== '') {
         proc.tail.push(line)
         if (proc.tail.length > TAIL_LIMIT) proc.tail.shift()

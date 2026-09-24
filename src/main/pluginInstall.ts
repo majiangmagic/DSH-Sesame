@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { decodeChunk } from './textDecode'
 import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { cmpVer, parseVer } from './registry'
@@ -140,6 +141,8 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
         // (TTY hangs)"。pnpm 在非 CI 环境下会走交互分支，遇到需要确认/等待输入的
         // 情形就永久挂住 —— 正是我遇到过的症状（90 秒零输出、永不结束）。
         CI: 'true',
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
         // **不要再把 progress 关掉**：这里原来是 `npm_config_progress: 'false'`，
         // pnpm 因此几乎不输出，界面上就成了"点了更新、什么都没发生"。
         // append-only 让 pnpm 以纯文本逐行输出（不依赖 TTY），才拿得到持续可见的进度。
@@ -168,7 +171,7 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
     }, PLUGIN_TIMEOUT_MS)
     let buffer = ''
     const consume = (chunk: Buffer): void => {
-      buffer += chunk.toString('utf8')
+      buffer += decodeChunk(chunk)
       const lines = buffer.split(/\r?\n/)
       buffer = lines.pop() ?? ''
       for (const line of lines) {
