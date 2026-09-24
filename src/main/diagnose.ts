@@ -40,12 +40,23 @@ const QUIET_MS = 8_000
 /** 原样保留的尾部行数（解析不出来时界面仍有东西可看） */
 const RAW_TAIL_LINES = 50
 
-const RE_FAILED_HEAD = /^Failed plugins \((\d+)\):/
-const RE_ENTRY = /^ {2}(\S+) \((required|optional)\)$/
-const RE_PKG = /^ {4}Package: (.+)$/
-const RE_ERR = /^ {4}Error: (.+)$/
-const RE_SKIP = /^dsh: skipping profile bundle "([^"]+)": Error: (.+)$/
-const RE_LOG_PATH = /^Full diagnostics: (.+)$/
+/*
+ * 锚点一律**容忍缩进**（^\s*）。
+ *
+ * 原因（用真实失败日志验过）：失败时优先读的是 dsh 落盘的 startup-*.log，
+ * 而那份日志把整个错误对象 dump 出来，块是**带缩进**的：
+ *     [缩进 2] Failed plugins (1):
+ *     [缩进 4] webserver (required)
+ *     [缩进 6] Package: @deepseek-ai/dsh-host-webserver
+ * 原来的 ^Failed plugins… 在那份日志里匹配 0 条（实测），
+ * 于是 problems 永远为空、界面只能说"没指出具体是哪个插件"。
+ */
+const RE_FAILED_HEAD = /^\s*Failed plugins \((\d+)\):\s*$/
+const RE_ENTRY = /^\s*(\S+) \((required|optional)\)\s*$/
+const RE_PKG = /^\s*Package: (.+)$/
+const RE_ERR = /^\s*Error: (.+)$/
+const RE_SKIP = /^\s*dsh: skipping profile bundle "([^"]+)": Error: (.+)$/
+const RE_LOG_PATH = /^\s*Full diagnostics: (.+)$/
 
 /** 解析 dsh 的诊断文本。只认上面那些锚点；认不出来就返回空，由调用方兜底展示原文。 */
 export function parseDiagnosis(text: string): {
@@ -77,7 +88,7 @@ export function parseDiagnosis(text: string): {
       continue
     }
     // 离开 Failed 段（出现别的段标题）
-    if (/^(Plugins waiting for services|Full diagnostics|dsh: startup)/.test(line)) {
+    if (/^\s*(Plugins waiting for services|Full diagnostics|dsh: startup)/.test(line)) {
       inFailed = false
       current = null
       continue
