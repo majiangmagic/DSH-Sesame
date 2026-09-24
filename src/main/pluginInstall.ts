@@ -54,6 +54,14 @@ function pickDsh(): { version: string; bin: string } {
   return { version: best.version, bin: best.bin }
 }
 
+/**
+ * 插件命令的超时。
+ *
+ * 原先 `run()` **没有超时** —— 实测一次「更新」挂到 90 秒以上、一行输出都没有，
+ * 界面就永远停在"更新中…"，用户只能重启应用。插件命令要联网拉包，必须有个上限。
+ */
+const PLUGIN_TIMEOUT_MS = 240_000
+
 function run(args: string[], onLine: (line: string) => void): Promise<{ code: number; tail: string[] }> {
   const tail: string[] = []
   const KEEP = 40
@@ -75,9 +83,32 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
         DSH_HOME: dshHome(),
         DSH_NODE: node.path,
         npm_config_update_notifier: 'false',
-        npm_config_progress: 'false'
+        // **不要再把 progress 关掉**：这里原来是 `npm_config_progress: 'false'`，
+        // pnpm 因此几乎不输出，界面上就成了"点了更新、什么都没发生"。
+        // append-only 让 pnpm 以纯文本逐行输出（不依赖 TTY），才拿得到持续可见的进度。
+        npm_config_reporter: 'append-only'
       }
     })
+    /**
+     * 超时保护。到点杀**整棵进程树** —— Windows 上 `child.kill()` 只杀直接子进程，
+     * 而 `plugin add` 会跑 postinstall，留下孙进程（与 runner.ts 同样的处理）。
+     */
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      try {
+        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
+      } catch {
+        child.kill()
+      }
+      reject(
+        new Error(
+          `插件命令超过 ${PLUGIN_TIMEOUT_MS / 1000} 秒仍未结束，已强制终止。\n` +
+            `最后几行输出：\n${tail.slice(-8).join('\n') || '(没有任何输出)'}`
+        )
+      )
+    }, PLUGIN_TIMEOUT_MS)
     let buffer = ''
     const consume = (chunk: Buffer): void => {
       buffer += chunk.toString('utf8')
@@ -95,6 +126,8 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
     child.stderr?.on('data', consume)
     child.on('error', reject)
     child.on('close', (code) => {
+      settled = true
+      clearTimeout(timer)
       if (buffer.trim() !== '') {
         if (tail.length >= KEEP) tail.shift()
         tail.push(buffer.trim())
@@ -116,11 +149,21 @@ function manifestDeps(): Record<string, string> {
   }
 }
 
-/** 把 pnpm 的输出过滤成给用户看的进度行 */
+/**
+ * 把 pnpm 的输出过滤成给用户看的进度行。
+ *
+ * 原先只放行 `/error|ERR_|added \d+|removed \d+|Packages:|Done in|WARN/`，
+ * 而 pnpm 正常工作时打的是 `Progress: resolved 1, reused 0, downloaded 0`、
+ * `Downloading …`、`Resolving …`、`+ dshmarket 1.61.0` —— **全部被丢掉**。
+ * 所以"点了更新之后一行输出都没有"，用户以为没反应，其实在跑。
+ *
+ * 现在全部放行（只丢掉空行）。pnpm 用 append-only reporter，输出是逐行的，
+ * 一次操作通常几十行，不会把界面刷爆。
+ */
 function progressLine(text: string, onProgress: (progress: PluginProgress) => void): void {
-  if (/error|ERR_|added \d+|removed \d+|Packages:|Done in|WARN/i.test(text)) {
-    onProgress({ phase: 'install', text })
-  }
+  const line = text.trim()
+  if (line === '') return
+  onProgress({ phase: 'install', text: line })
 }
 
 /**
