@@ -1,0 +1,38 @@
+/*
+ * Vue 挂载点 + Electron 无边框窗口的两个必要适配。
+ *
+ * 这是本次移植**唯一**新增的样式文件。tokens / base / components 三个文件里的 CSS
+ * 全部逐字符照搬原版，不含任何为适配 Vue 或 Electron 而做的改动。
+ */
+
+/*
+ * 1) 挂载点对布局透明。
+ *
+ * 原版布局里 body 自己就是两行网格（`grid-template-rows: auto 1fr`），header 与 main 是
+ * body 的直接子元素。迁到 Vue 后 body 下多了一层 #app：如果给 #app 另起一套网格，它会先被
+ * body 的 `auto` 行收走高度，main 拿不到 `1fr`，整页塌成内容高度、卡片也就不会垂直居中。
+ *
+ * `display: contents` 让 #app 不生成盒子，header / main / 三个 fixed 遮罩直接成为 body 的
+ * 网格项——和原版的盒子结构完全一致，body 那条原始规则一个字都不用改。
+ */
+#app {
+  display: contents;
+}
+
+/*
+ * 2) 顶栏拖动。
+ *
+ * 原版是纯 Web 页面，拖动窗口靠 JS 监听指针事件再 postMessage 给宿主（见原脚本
+ * `ipc.postMessage('drag')`）。Electron 有原生机制，用 -webkit-app-region 更跟手，
+ * 而且 Windows 上双击拖动区自动最大化，正好对上原版 `detail >= 2 ? 'maximize' : 'drag'`。
+ *
+ * 注意：拖动区会吞掉点击，所以按钮和链接必须显式标回 no-drag，否则导航点不动。
+ */
+header {
+  -webkit-app-region: drag;
+}
+
+header button,
+header a {
+  -webkit-app-region: no-drag;
+}

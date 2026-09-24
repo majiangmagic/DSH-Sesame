@@ -1,0 +1,18 @@
+/*
+ * tokens.css —— 设计令牌（CSS 自定义属性）
+ * 职责：集中声明 :root 上的全局设计令牌（配色等），供 base.css / components.css 以 var() 引用。
+ * 来源：从原管理页的内联样式块整理而来。
+ * 说明：变量名、取值与声明顺序均与原版逐字符一致，未新增、删除、修改或重排任何令牌。
+ */
+
+:root {
+  --bg: #eef3fd;
+  --card: #fff;
+  --line: #d8e2f7;
+  --text: #16233d;
+  --muted: #6b7d9c;
+  --accent: #3b6fe0;
+  --accent-soft: #eaf1ff;
+  --accent-dim: #e2ebff;
+  --danger: #e11d48;
+}

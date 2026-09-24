@@ -1,0 +1,16 @@
+node_modules/
+# 编译产物（electron-vite 的输出；默认名 out/，本项目改成 compiled/）
+# 两个都留着：改过名，且防止哪天又回到默认名时被误提交
+compiled/
+out/
+dist/
+release/
+.vite/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+
+# 已安装的 dsh 版本（应用旁边的相对路径版本池，见 src/main/paths.ts）
+dsh/

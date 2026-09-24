@@ -1,0 +1,135 @@
+/*
+ * base.css —— 全局基础样式
+ * 职责：不含 class / id 的元素级与根级选择器（*、html、body、header、main、nav、label、input、select 等）的全局重置与基础排版。
+ * 来源：从原管理页的内联样式块整理而来。
+ * 说明：规则顺序沿用原版相对顺序；class / id 规则见 components.css，设计令牌见 tokens.css。
+ */
+
+/* ---- 全局盒模型与根排版（*、html、body） ---- */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+/* ---- 顶栏与内容骨架（header） ---- */
+
+header,
+main {
+  position: relative;
+  z-index: 1;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px;
+}
+
+/* ---- 顶部导航（nav 及其伪元素 / 按钮） ---- */
+
+nav {
+  --tab-x: 4px;
+  --tab-width: 72px;
+  position: relative;
+  display: flex;
+  gap: 4px;
+  background: var(--accent-soft);
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  isolation: isolate;
+}
+
+nav::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  top: 4px;
+  width: var(--tab-width);
+  height: calc(100% - 8px);
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 3px 10px rgba(59, 111, 224, 0.22);
+  transform: translateX(var(--tab-x));
+  transition: transform 360ms cubic-bezier(.22, 1, .36, 1), width 360ms cubic-bezier(.22, 1, .36, 1);
+}
+
+nav button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+nav button:hover {
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* ---- 主内容区（main） ---- */
+
+main {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- 表单控件（label / input / select） ---- */
+
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+input[type=text],
+input[type=number],
+select {
+  width: 100%;
+  appearance: none;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+}
+
+input[type=text]:focus,
+input[type=number]:focus,
+select:focus {
+  outline: 1px solid var(--accent);
+}
+
+select {
+  width: 148px;
+  flex: 0 0 auto;
+  cursor: pointer;
+  /* appearance:none 会把原生箭头去掉，这里自己画一个 */
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7d9c' d='M0 0h12L6 8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 9px 6px;
+  padding-right: 30px;
+}

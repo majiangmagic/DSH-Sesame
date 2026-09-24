@@ -1,0 +1,897 @@
+/*
+ * DSH-Sesame 新增界面。
+ *
+ * ⚠️ 这个文件里的**全部规则都是新增的**，是为"控制页加插件开关 + 版本管理"
+ * 这个新需求写的。tokens / base / components 三个文件仍然是原版的逐字符复制，任何
+ * 为满足新需求而写的样式都只能落在这里 —— 这样"复刻是否还保真"随时可以用
+ * `git diff` 那三个文件来判断（它们应当永远没有改动）。
+ *
+ * 颜色一律取自 tokens.css 的变量，不写裸色值。
+ */
+
+/* ---- 控制页改成纵向卡片流 ---- */
+
+/*
+ * 原版控制页只有一张卡片，靠 #page-home 的 align/justify: center 居中。
+ * 现在它下面多了「插件开关」和「版本管理」两块，必须改成从顶部开始的纵向滚动流。
+ *
+ * 选择器带 id 是必要的：#page-home { align-items/justify-content } 的特异性是 (1,0,0)，
+ * 单纯加一个 class 压不过它。
+ */
+#page-home.home-stack {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* 三张卡片同宽并居中；比原版单卡（640）略宽，给版本行放得下版本号 + 按钮 */
+#page-home.home-stack > .card {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  flex: 0 0 auto;
+}
+
+/* 卡片内的列表不再受 .card.plugins 的 max-height 约束（首页用的是普通 .card） */
+#page-home .plugin-list {
+  max-height: none;
+}
+
+/* ---- 版本管理页（新增的独立标签页） ---- */
+
+/*
+ * 原版的居中规则只列了 #page-home / #page-plugins / #page-settings，
+ * 新增的 #page-versions 要自己补一份，否则卡片会贴在左上角。
+ */
+#page-versions {
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* 与 .card.plugins 同样的约束：撑满可用高度，列表在卡片内部滚动 */
+.card.versions {
+  width: min(720px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ---- 列表分组小标题（已安装 / 可下载） ---- */
+
+.section-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 14px 8px 6px;
+}
+
+.section-label:first-child {
+  padding-top: 2px;
+}
+
+/* ---- 版本管理行 ---- */
+
+.version-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 10px;
+  transition: background 0.12s ease;
+}
+
+.version-row:hover {
+  background: var(--accent-soft);
+}
+
+.version-row:last-child {
+  border-bottom: 0;
+}
+
+.version-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.version-name {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.version-meta {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 徽标 ---- */
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.7;
+  vertical-align: middle;
+}
+
+.tag.muted {
+  background: #f2f5fc;
+  color: var(--muted);
+}
+
+/* ---- 危险动作按钮（卸载） ---- */
+
+.ghost.danger {
+  color: var(--danger);
+  border-color: #f7ccd2;
+}
+
+.ghost.danger:hover:not(:disabled) {
+  background: #fff1f2;
+  border-color: #f0b8c2;
+}
+
+/* ---- 「样例数据」标注的位置微调 ---- */
+
+/* 日志页的 .logbar 是右对齐的，标注要靠左，跟清空按钮分开 */
+.logbar .tag {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+/* ---- 插件市场 ---- */
+
+/* 搜索框 + 分类条：市场页在 .plugin-head 下面多一层工具栏 */
+.market-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0 12px;
+}
+
+.market-search {
+  width: 100%;
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.market-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* 分类条横向滚动，不换行 —— 分类很多，换行会把列表挤下去 */
+.market-cats {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.chip {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+}
+
+.chip.on {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chip-n {
+  margin-left: 5px;
+  opacity: 0.7;
+}
+
+/* 一行一个插件：左侧信息，右侧动作 */
+.market-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.market-row:last-child {
+  border-bottom: none;
+}
+
+.market-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.market-name {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.market-owner {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 简介最多两行，避免长描述把行高撑爆 */
+.market-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.market-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.market-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+}
+
+/* 「没有匹配」那一格是纵向的（一句提示 + 一个清空按钮） */
+.plugin-empty .ghost {
+  margin-top: 10px;
+}
+
+/* ==========================================================================
+   暗色磨砂玻璃主题（DSH-Sesame 新增）
+   ==========================================================================
+
+   做法：**只覆盖令牌 + 少数几条规则**，不重写移植过来的样式。
+
+   tokens.css / base.css / components.css 三份必须与移植源逐字符一致（项目规矩），
+   所以配色不改在原文件里，而是在这里做 `:root` 同名覆盖 —— custom.css 最后加载，
+   同优先级下后者胜出。base.css 的 `body { background: var(--bg) }` 因此自动跟着变。
+
+   背景不再是那张大立绘 + 水面 canvas，而是 CSS 画出来的：
+   深色底 + 网格 + 两团氛围光。好处是不用新增二进制资源、任意分辨率都清晰。
+   -------------------------------------------------------------------------- */
+
+:root {
+  --bg: #060a13;
+  /* 半透明 —— 配合卡片的 backdrop-filter 才是"磨砂玻璃"而不是"灰卡片" */
+  --card: rgba(17, 25, 41, 0.58);
+  --line: rgba(140, 150, 255, 0.18);
+  --text: #e8eefb;
+  --muted: #8ba0c2;
+  --accent: #4d8dff;
+  --accent-soft: rgba(77, 141, 255, 0.16);
+  --accent-dim: rgba(77, 141, 255, 0.09);
+  --danger: #ff5f7d;
+
+  /* ---- 霓虹紫 ----
+   * 交互色（--accent）保持蓝：按钮/链接/选中态用它，整体偏紫会让人分不清"哪里能点"。
+   * 紫色只用在**氛围**上（辉光、网格、卡片描边），负责"暗色科技感"的味道。
+   */
+  --neon: #a855f7;
+  --neon-deep: #7c3aed;
+  --neon-magenta: #d946ef;
+  --neon-line: rgba(160, 130, 255, 0.075);
+}
+
+/* ---- 背景层：网格 + 氛围光 + 紫色霓虹 ---- */
+
+.backdrop {
+  /* 网格：一格 44px，极低不透明度，只在暗底上看得见一点结构感。
+     线色偏紫（原来是偏蓝的 rgba(122,166,255)），是霓虹感最省的一处改动 ——
+     它铺满全屏，色调一偏，整体冷暖就跟着变。 */
+  background-image:
+    linear-gradient(var(--neon-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--neon-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: center;
+}
+
+/*
+ * 网格往边缘淡出，避免整屏都是格子显得廉价。
+ * 边缘淡出画在元素自身的 background 上；两团**会漂移的霓虹**交给伪元素。
+ *
+ * 为什么用伪元素 + transform 而不是继续叠 background 层：
+ *   静态渐变叠多少层都不花钱，但**动起来**就不一样 —— 每帧重绘一个 90vmax 的
+ *   radial-gradient 很贵。改用 transform/opacity 动画只走合成器，不重绘。
+ * 两个动画周期刻意取不同值（24s / 31s）且都 alternate，所以永远不同步，
+ * 画面一直在缓慢变化而不会看出"循环"。
+ */
+.backdrop-grid-mask {
+  position: absolute;
+  inset: 0;
+  /* 漂移的光团不许顶出滚动条 */
+  overflow: hidden;
+  background: radial-gradient(ellipse 80% 70% at 50% 40%, transparent 30%, var(--bg) 100%);
+}
+
+.backdrop-grid-mask::before,
+.backdrop-grid-mask::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* 右上：品红偏紫，冷艳的那一侧 */
+.backdrop-grid-mask::before {
+  width: 92vmax;
+  height: 92vmax;
+  right: -26vmax;
+  top: -34vmax;
+  background: radial-gradient(circle, rgba(217, 70, 239, 0.20) 0%, transparent 62%);
+  animation: neon-drift-a 24s ease-in-out infinite alternate;
+}
+
+/* 左下：正紫，压住暗部 */
+.backdrop-grid-mask::after {
+  width: 86vmax;
+  height: 86vmax;
+  left: -24vmax;
+  bottom: -32vmax;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.26) 0%, transparent 64%);
+  animation: neon-drift-b 31s ease-in-out infinite alternate;
+}
+
+/* 漂移幅度取几个 vmax：能看出来在动，又不至于让人盯着它出神 */
+@keyframes neon-drift-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-9vmax, 7vmax, 0) scale(1.12);
+    opacity: 0.78;
+  }
+}
+
+@keyframes neon-drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1.06);
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 0.98;
+  }
+  100% {
+    transform: translate3d(8vmax, -6vmax, 0) scale(1);
+    opacity: 0.82;
+  }
+}
+
+/* 左上那团：从偏青的蓝改成偏紫的蓝，和右下呼应成一个冷紫系 */
+.backdrop::before {
+  width: 78vmax;
+  height: 78vmax;
+  right: -30vmax;
+  top: -34vmax;
+  background: radial-gradient(circle, rgba(96, 108, 255, 0.22) 0%, transparent 66%);
+  /* 缓慢"呼吸"：霓虹灯不是恒亮的。11 秒一个来回，幅度到 0.7 但不闪 */
+  animation: neon-breathe 11s ease-in-out infinite;
+}
+
+/* 星点：蓝紫混着来，纯蓝会显得是"星空"而不是"霓虹"；并且各自明灭 */
+.backdrop::after {
+  left: 7%;
+  bottom: 12%;
+  width: 4px;
+  height: 4px;
+  background: #8b9bff;
+  box-shadow:
+    9vw -23vh 0 1px rgba(150, 150, 255, 0.8),
+    22vw -9vh 0 rgba(217, 70, 239, 0.6),
+    4vw -40vh 0 rgba(124, 100, 255, 0.65),
+    70vw -15vh 0 1px rgba(180, 120, 255, 0.75),
+    80vw -48vh 0 rgba(110, 168, 255, 0.5);
+  animation: neon-twinkle 6.5s ease-in-out infinite alternate;
+}
+
+/* 右下角那团冷紫：提饱和、放大一点，让紫色成为能看见的第二主色 */
+body::after {
+  content: "";
+  position: fixed;
+  left: -24vmax;
+  bottom: -30vmax;
+  width: 72vmax;
+  height: 72vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 92, 255, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes neon-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* 星点明灭：幅度刻意不对称，看起来像各自在一闪一闪，而不是整体一起调亮 */
+@keyframes neon-twinkle {
+  0% {
+    opacity: 0.55;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.7;
+  }
+}
+
+/*
+ * 动效敏感的用户：**关掉全部霓虹动画**，静态显示同样的配色。
+ * 这类用户对缓慢漂移/呼吸也会不适，所以不是"降速"而是"全停"。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .backdrop::before,
+  .backdrop::after,
+  .backdrop-grid-mask::before,
+  .backdrop-grid-mask::after {
+    animation: none;
+  }
+}
+
+/* 卡片描边从"蓝灰"改成"蓝紫"，让它看起来是被霓虹照亮而不是灰框 */
+.card {
+  border-color: rgba(150, 140, 255, 0.16);
+}
+
+/* ---- 磨砂玻璃卡片 ---- */
+
+.card {
+  /* 半透明底(令牌) + 背景模糊 = 磨砂玻璃 */
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* 顶栏也做成磨砂，滚动时内容从下面透过去 */
+header {
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+}
+
+/* 原版的下拉箭头是浅灰色 SVG，暗底上偏暗，换成亮一点的 */
+select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238ba0c2' d='M0 0h12L6 8z'/%3E%3C/svg%3E");
+}
+
+/* ---- 摸头伴侣（替代原来的可点击看板娘） ---- */
+
+/*
+ * 素材取自 dsh-whale-widget-bowl（MIT，作者 Witherwithwinter）：
+ *   dsniang.png  610×610   主立绘（待机）
+ *   rua.gif      128×128   摸头动画（原插件里是"petpet"气泡图）
+ *
+ * 只取贴图与动画，**不包含该插件的任何功能**。
+ */
+.pat {
+  position: fixed;
+  right: 22px;
+  bottom: 14px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 只有角色本身接鼠标事件，容器不挡住底下的卡片 */
+  pointer-events: none;
+}
+
+.pat-figure {
+  position: relative;
+  width: 240px;
+  height: 240px;
+  pointer-events: auto;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  background: none;
+  /* 塌陷要"塌到底部"而不是整体缩放，所以原点放在脚底 */
+  transform-origin: 50% 100%;
+  transition: transform 140ms ease;
+}
+
+.pat-figure:hover {
+  transform: translateY(-3px);
+}
+
+.pat-figure:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+/*
+ * 注意选择器优先级：立绘与摸头动画用各自的类，**不要**写成 `.pat-figure img` ——
+ * 那种写法是 (0,1,1)，会压过 `.pat-rua` 的 (0,1,0)，把动画的尺寸和定位顶掉。
+ */
+.pat-body {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* 立绘自带浅色描边，暗底上给一点光晕让它和背景分开 */
+  filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.5));
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+/*
+ * 摸头气泡：点一下从头顶弹出，里面装的就是那个摸头表情包。
+ *
+ * 它在原插件里本来就是**气泡图**（`bubble-petpet.gif`，和 `rua.gif` 是同一个文件），
+ * 所以正确做法是"弹一个气泡、表情包在气泡里"，而不是把 gif 直接浮在头顶。
+ *
+ * **生命周期同样由 CSS 管，不靠 JS 定时器** —— Electron 窗口在后台时 `backgroundThrottling`
+ * 会节流定时器（实测过：窗口不在前台时 1500ms 的定时器没按时触发，气泡不收）。
+ * 淡出写成 keyframe 的 `forwards`，即使 JS 被节流视觉上也已经收干净；JS 只做 DOM 清理。
+ */
+.pat-bubble {
+  position: absolute;
+  left: 50%;
+  /*
+   * 居中的 `translateX(-50%)` **必须常驻在规则里**。
+   *
+   * 曾经的 bug：只把它写在 `pat-bubble-in` 的关键帧里 —— 入场 200ms 期间居中，
+   * 动画一结束 `transform` 回到 `none`，气泡就整体右移半个自身宽度；淡出那段又是歪着淡出。
+   * 表现在界面上就是"气泡一会儿偏左一会儿偏右"。
+   * 关键帧里仍然要重复它，否则插值的起点/终点会退化成 `none`。
+   */
+  transform: translateX(-50%);
+  bottom: calc(100% + 14px);
+  padding: 8px;
+  border-radius: 16px;
+  background: rgba(22, 32, 52, 0.92);
+  border: 1px solid rgba(122, 166, 255, 0.28);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  pointer-events: none;
+  animation:
+    pat-bubble-in 200ms cubic-bezier(0.22, 1.2, 0.36, 1),
+    pat-bubble-out 320ms ease-in 1180ms forwards;
+}
+
+/* 气泡的小尾巴，指向角色 */
+.pat-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -9px;
+  border: 9px solid transparent;
+  border-top-color: rgba(22, 32, 52, 0.92);
+}
+
+.pat-bubble-gif {
+  display: block;
+  width: 104px;
+  height: 104px;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+@keyframes pat-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px) scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes pat-bubble-out {
+  /* 起始与结束都带着居中位移，保证淡出过程中不横向漂移 */
+  from {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%);
+  }
+}
+
+/* 压扁（塌）的关键帧在 PatCompanion.vue 里用 WAAPI 声明 —— 不能用加 class 的方式触发：
+   同一个 class 连续加不会重播动画（computed animation-name 没变），连点就会没反应。
+   上面 `.pat-figure` 的 `transform-origin: 50% 100%` 让塌陷从脚底发生。 */
+
+/* 窗口窄的时候缩小一点，别压住内容 */
+@media (max-width: 1100px) {
+  .pat-figure {
+    width: 180px;
+    height: 180px;
+  }
+}
+
+/* ---- 市场页的补充控件 ---- */
+
+/* 搜索框占满，排序按钮按内容宽度 */
+.market-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.market-search-row .market-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.market-sort {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 底部一行：左侧计数提示（.hint 自带 margin-top:auto 会把 foot 顶到底部），右侧「加载更多」 */
+.market-foot {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.market-foot .hint {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.market-foot .ghost {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 未被目录收录的已装插件说明 —— 比普通 hint 更弱，是补充信息不是操作提示 */
+.market-unlisted {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* 包名可能很长（带 scope），允许断行，别把作者行挤走 */
+.market-pkg {
+  word-break: break-all;
+}
+
+/* ============================================================
+ * 暗色下压掉原版硬编码的浅色值
+ * ============================================================
+ *
+ * `components.css` 是逐字节照抄原版的（项目约定不许改），而它是按**浅色主题**写的 ——
+ * 其中一部分颜色**写死成字面值**（`#fff` / `#f8fbff` / `#b9ccf0` / `#c7d8f7`），
+ * 不走 CSS 令牌，所以只覆盖 `:root` 的令牌对它们无效：界面会出现白色下拉框、白色按钮。
+ *
+ * 这里逐条压过去（custom.css 在 components.css 之后加载，同权重后者胜）。
+ * 注意 `color: #fff` 那些**不要动** —— 它们多半是强调色按钮上的前景色，暗色下本来就对。
+ */
+
+/* ---- 自绘下拉（.select-trigger / -panel / -option）---- */
+.select-trigger {
+  background: rgba(13, 20, 36, 0.92);
+}
+.select-trigger:hover:not(:disabled) {
+  background: rgba(22, 32, 52, 0.95);
+  border-color: rgba(122, 166, 255, 0.45);
+}
+.select.open .select-trigger {
+  background: rgba(13, 20, 36, 0.98);
+}
+.select-panel {
+  background: rgba(9, 14, 26, 0.98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.select-option.active {
+  background: rgba(77, 141, 255, 0.14);
+}
+.select-option.selected {
+  background: rgba(77, 141, 255, 0.2);
+}
+.select-option.selected .opt-badge {
+  border-color: rgba(122, 166, 255, 0.45);
+}
+
+/* ---- 幽灵按钮（.ghost）——「刷新」这类小按钮，原本是白底 ---- */
+.ghost {
+  background: rgba(18, 27, 45, 0.9);
+  border-color: rgba(122, 166, 255, 0.32);
+  color: #9dc0ff;
+}
+.ghost:hover:not(:disabled) {
+  background: rgba(77, 141, 255, 0.18);
+  border-color: rgba(122, 166, 255, 0.5);
+}
+
+/* 危险操作（卸载）用红色调，别再落回浅底的粉 */
+.ghost.danger {
+  color: #ff9aa6;
+  border-color: rgba(255, 122, 138, 0.34);
+}
+.ghost.danger:hover:not(:disabled) {
+  background: rgba(255, 90, 110, 0.16);
+  border-color: rgba(255, 122, 138, 0.55);
+}
+
+/* ---- 原生表单控件（设置页的 select / input）----
+ *
+ * 设置页用的是原生 `<select>` 与 `<input>`，浏览器默认外观是**白底**，与暗色主题割裂；
+ * components.css 里对应的规则也写死了浅色，所以在 custom.css 压过。
+ * （版本选择器是自绘的 listbox，见上面的 `.select-*` 一段 —— 两者不是同一个东西，
+ *   这也是为什么先前修了下拉框、设置页这两个仍然是白的。）
+ */
+.settings select,
+.settings input[type='text'],
+.settings input[type='number'] {
+  background: rgba(13, 20, 36, 0.92);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+}
+
+/* 展开后的列表由系统绘制，暗色下要显式给 option 上色，否则仍是白底黑字 */
+.settings select option {
+  background: #0d1424;
+  color: var(--text);
+}
+
+/* 不可选项（profile 的 tui 占位）要明显看出"现在不能用" */
+.settings select option:disabled {
+  color: #5c6b86;
+}
+
+.settings input::placeholder {
+  color: #6b7d9c;
+}
+
+.settings select:focus-visible,
+.settings input:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 样例标注那一行：没有标注时不占位 */
+.settings-head:empty {
+  display: none;
+}
+
+/* ---- 缩略图 ---- */
+
+/*
+ * 截图来自目录的 `screenshots` 字段（只有 811/4183 条有），经 **主进程图片代理**（`/__img`）取回 ——
+ * 渲染层发不出远程请求（实测），所以不能直接写 https 地址。
+ * 没有截图时显示作者首字母占位：本地生成，不联网，也不会出现破图。
+ */
+.market-thumb {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(77, 141, 255, 0.22), rgba(124, 92, 255, 0.16));
+}
+
+.market-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.market-thumb-text {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.market-version {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* 目录里的 npm 包名（与短名不同时才显示） */
+.market-npm {
+  margin-left: 6px;
+  font-size: 11px;
+  opacity: 0.7;
+  word-break: break-all;
+}
+
+/* ---- 承重规则（背景层与页面的层叠/命中）----
+ *
+ * 这三条原本在 mascot.css（那份看板娘样式表）里。删掉它时必须迁过来，否则：
+ *   · 没有 z-index —— 无边框窗口的标题栏与页面内容会被背景层盖住；
+ *   · 没有 pointer-events —— .page 会吃掉鼠标事件，卡片里的按钮点不动。
+ */
+header,
+main {
+  z-index: 3;
+}
+
+main,
+.page {
+  pointer-events: none;
+}
+
+.page > * {
+  pointer-events: auto;
+}
+
+/* ---- 这两层氛围光是关闭状态（刻意保留关闭）----
+ *
+ * `.backdrop::before`（呼吸光晕）与 `.backdrop::after`（星点）的样式在上面，
+ * 但它们一直被 mascot.css 里的一句 `display: none` 关着 —— 也就是说**从未渲染过**。
+ * 删掉那份样式表后必须把这条抑制原样迁过来，否则两层光会突然出现、界面就变了。
+ *
+ * 想放它们出来：删掉下面这条 display 即可（样式已经写好，直接生效）。
+ */
+.backdrop::before,
+.backdrop::after {
+  display: none;
+}

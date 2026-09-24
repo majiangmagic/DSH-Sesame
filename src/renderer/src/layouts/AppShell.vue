@@ -1,0 +1,106 @@
+<script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import WinControls from '@/components/WinControls.vue'
+
+/**
+ * 顶栏 + 页面容器。
+ *
+ * 三处与原版脚本等价、但必须重写的交互：
+ *  1. tab 切换：原版靠 `data-tab` + 显示/隐藏 `.page`，这里交给 vue-router；
+ *  2. 胶囊指示器：原版把 `--tab-x` / `--tab-width` 写到 nav 上，让 `nav::before` 滑过去；
+ *  3. 页面进入动画：原版按 tab 顺序给 `.page` 加 `tab-enter-forward` / `tab-enter-backward`。
+ */
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+
+/**
+ * 顺序即左右方向，决定切换时的动画朝向。
+ *
+ * 「版本」按需求紧跟在「控制」后面 —— 控制页只负责"启哪个版本"，版本管理就在它隔壁。
+ * 其余三个（插件 / 终端 / 设置）保持原版的相对顺序。
+ */
+const TABS: Array<{ path: string; label: string }> = [
+  { path: '/home', label: 'nav.home' },
+  { path: '/versions', label: 'nav.versions' },
+  { path: '/plugins', label: 'nav.plugins' },
+  { path: '/log', label: 'nav.log' },
+  { path: '/settings', label: 'nav.settings' }
+]
+
+const version = __APP_VERSION__
+const navEl = ref<HTMLElement | null>(null)
+const transitionClass = ref('')
+/** 启动器自身有新版本时才显示；本阶段没有逻辑驱动，恒为 false */
+const hasLauncherUpdate = ref(false)
+
+let lastIndex = Math.max(0, TABS.findIndex((tab) => tab.path === route.path))
+
+/** 把胶囊指示器挪到当前 tab 下（原版就是这两个变量的语义：offsetLeft / offsetWidth） */
+function movePill(): void {
+  const nav = navEl.value
+  if (!nav) return
+  const active = nav.querySelector<HTMLButtonElement>('button.active')
+  if (!active) return
+  nav.style.setProperty('--tab-x', `${active.offsetLeft}px`)
+  nav.style.setProperty('--tab-width', `${active.offsetWidth}px`)
+}
+
+watch(
+  () => route.path,
+  async (path) => {
+    const index = TABS.findIndex((tab) => tab.path === path)
+    if (index >= 0 && index !== lastIndex) {
+      transitionClass.value = index > lastIndex ? 'tab-enter-forward' : 'tab-enter-backward'
+      lastIndex = index
+    }
+    await nextTick()
+    movePill()
+  }
+)
+
+function onResize(): void {
+  movePill()
+}
+
+onMounted(() => {
+  movePill()
+  // 字体加载完成后按钮宽度会变，指示器必须重算，否则会停在偏左的位置
+  void document.fonts?.ready.then(() => movePill())
+  window.addEventListener('resize', onResize)
+})
+
+onBeforeUnmount(() => window.removeEventListener('resize', onResize))
+</script>
+
+<template>
+  <header>
+    <div class="brand-block">
+      <div class="brand">{{ t('app.title') }}</div>
+      <span class="app-ver" id="appVer">{{ version }}</span>
+      <button type="button" class="self-update" id="selfUpdate" :hidden="!hasLauncherUpdate">
+        {{ t('home.actionUpdate') }}
+      </button>
+    </div>
+    <div class="header-right">
+      <nav ref="navEl">
+        <button
+          v-for="tab in TABS"
+          :key="tab.path"
+          :class="{ active: route.path === tab.path }"
+          @click="router.push(tab.path)"
+        >
+          {{ t(tab.label) }}
+        </button>
+      </nav>
+      <WinControls />
+    </div>
+  </header>
+  <main>
+    <router-view v-slot="{ Component }">
+      <component :is="Component" :class="transitionClass" />
+    </router-view>
+  </main>
+</template>
