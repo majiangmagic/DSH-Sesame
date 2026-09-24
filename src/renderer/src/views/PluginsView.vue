@@ -155,6 +155,18 @@ onMounted(() => {
           >
             {{ t('market.allCategories') }}<span class="chip-n">{{ market.total }}</span>
           </button>
+          <!--
+            「已装」筛选。市场有四万多条且默认按星数降序，已装的包星数往往不高，
+            不加这一项用户自己的插件会沉到几十上百位之后，"更新"按钮等于够不着。
+          -->
+          <button
+            class="chip"
+            type="button"
+            :class="{ 'state-enabled': market.onlyInstalled }"
+            @click="market.setOnlyInstalled(!market.onlyInstalled)"
+          >
+            {{ t('status.installed') }}<span class="chip-n">{{ market.installedCount }}</span>
+          </button>
           <button
             v-for="item in market.categories"
             :key="item.name"

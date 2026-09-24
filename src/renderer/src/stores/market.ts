@@ -72,6 +72,13 @@ export const useMarketStore = defineStore('market', () => {
   const query = ref('')
   const category = ref('')
   const sort = ref<MarketSort>('stars')
+  /**
+   * 只看已装。
+   *
+   * 市场有四千多条且**默认按星数降序**，而已装的包星数往往不高 —— 不加这个筛选，
+   * 用户自己的插件会沉到几十上百位之后，"更新"按钮等于够不着。
+   */
+  const onlyInstalled = ref(false)
   /** 正在安装或卸载的包名（两者不会同时发生，共用一个字段） */
   const busyName = ref<string | null>(null)
   /** 主进程推回来的进度文案（pnpm 的输出行） */
@@ -149,6 +156,7 @@ export const useMarketStore = defineStore('market', () => {
     const needle = query.value.trim().toLowerCase()
     const picked = category.value
     const list = plugins.value.filter((plugin) => {
+      if (onlyInstalled.value && !installedNames.value.has(identityOf(plugin))) return false
       if (picked !== '' && !(plugin.category ?? []).includes(picked)) return false
       if (needle === '') return true
       // 名称、作者与简介都参与匹配：目录里中文简介往往比包名更好搜
@@ -204,6 +212,12 @@ export const useMarketStore = defineStore('market', () => {
 
   function setSort(value: MarketSort): void {
     sort.value = value
+    pageSize.value = PAGE_STEP
+  }
+
+  /** 切换"只看已装"。换筛选条件要回到第一页，否则会停在上一轮的窗口大小上 */
+  function setOnlyInstalled(value: boolean): void {
+    onlyInstalled.value = value
     pageSize.value = PAGE_STEP
   }
 
@@ -329,7 +343,11 @@ export const useMarketStore = defineStore('market', () => {
     error,
     query,
     category,
-    sort,    updateTarget,    update,
+    sort,
+    updateTarget,
+    update,
+    onlyInstalled,
+    setOnlyInstalled,
     busyName,
     progressText,
     plugins,
