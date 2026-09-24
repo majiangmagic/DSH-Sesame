@@ -9,7 +9,7 @@ cd <项目目录>
 npm run dist && node scripts/publish-release.mjs
 ```
 
-等价于 `npm run release`。成品落在**与本项目平级的** `DSH-Sesame-release\`（用环境变量 `SESAME_RELEASE_DIR` 可改到别处）：
+等价于 `npm run release`。成品位置由 `electron-builder.yml` 的 `output:` 决定（默认是**与本项目平级**的 `DSH-Sesame-release\`）—— 发布脚本会读它，所以只有那一处定义。临时改到别处也可以用环境变量 `SESAME_RELEASE_DIR`：
 `DSH-Sesame-Setup-<版本>.exe` 及其 `.blockmap`、`latest.yml`（后两者由 electron-builder 自动生成）。
 
 **为什么分两步**：electron-builder 先写进 `_stage\`，`publish-release.mjs` 确认构建完整（安装包非空）才提到顶层 —— 这样失败的构建不会在发布目录里留下看起来正常的半成品。

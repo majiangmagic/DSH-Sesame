@@ -17,15 +17,42 @@
  *   node scripts/publish-release.mjs
  */
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { dirname, join, relative, sep } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = dirname(fileURLToPath(import.meta.url))
 // 默认取**项目目录的同级目录**（用脚本自身位置推算，所以与谁在哪台机器上克隆无关）。
 // 需要换位置时用环境变量 SESAME_RELEASE_DIR 覆盖。
-const TARGET = process.env['SESAME_RELEASE_DIR'] ?? join(ROOT, '..', '..', 'DSH-Sesame-release')
-const STAGE_NAME = '_stage'
+/**
+ * 从 electron-builder.yml 的 `output:` 反推成品目录与暂存目录名。
+ *
+ * **让 yml 成为唯一真相**：原来两边各自硬编码 DSH-Sesame-release 这个名字，
+ * 恰好一致但靠人写对 —— 改了 yml 这边就会静默找不到目录。
+ * 解析不了（文件不在、格式变了）就退回"与本项目平级"的默认值并警告，不因此崩掉。
+ */
+function resolveFromYml() {
+  const fallback = {
+    target: join(ROOT, '..', '..', 'DSH-Sesame-release'),
+    stage: '_stage'
+  }
+  try {
+    const yml = readFileSync(join(ROOT, '..', 'electron-builder.yml'), 'utf8')
+    const m = /^\s*output:\s*(.+?)\s*$/m.exec(yml)
+    if (!m) return fallback
+    const raw = m[1].replace(/^["']|["']$/g, '')
+    // output 是**相对项目目录**的路径；去掉末尾那一级（暂存目录）就是成品目录
+    const staged = resolve(join(ROOT, '..'), raw)
+    return { target: dirname(staged), stage: basename(staged) }
+  } catch {
+    console.warn('读不到 electron-builder.yml 的 output，改用默认的成品目录位置。')
+    return fallback
+  }
+}
+
+const fromYml = resolveFromYml()
+const TARGET = process.env['SESAME_RELEASE_DIR'] ?? fromYml.target
+const STAGE_NAME = fromYml.stage
 const SOURCE = join(TARGET, STAGE_NAME)
 const dryRun = process.argv.includes('--dry-run')
 
