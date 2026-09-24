@@ -29,9 +29,6 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: portable
-      arch:
-        - x64
 
 nsis:
   oneClick: false
@@ -41,6 +38,3 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: DSH-Sesame
   artifactName: DSH-Sesame-Setup-${version}.${ext}
-
-portable:
-  artifactName: DSH-Sesame-${version}-portable.${ext}
