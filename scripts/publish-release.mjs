@@ -1,5 +1,5 @@
 /**
- * 发布：把 electron-builder 的产物提到发布目录的**顶层**，再写校验清单。
+ * 发布：把 electron-builder 的产物提到发布目录的**顶层**。
  *
  * 目录布局（D:\agent 下这个项目只有一个目录）：
  *   D:\agent\DSH-Sesame-release\           ← 成品目录
