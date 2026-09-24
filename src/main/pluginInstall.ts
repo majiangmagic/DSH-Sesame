@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { cmpVer, parseVer } from './registry'
 import { dshHome, profileDir } from './dshHome'
@@ -62,7 +62,60 @@ function pickDsh(): { version: string; bin: string } {
  */
 const PLUGIN_TIMEOUT_MS = 240_000
 
+/**
+ * 一次性关掉 pnpm 的"最小发布年龄"闸。
+ *
+ * pnpm 对刚发布不久的版本有一道供应链保护。它的行为**不是报错，而是静默保留旧版本、
+ * 以退出码 0 结束** —— 所以"更新成功"是假的，包根本没变。实测三个目标版本分别只有
+ * 0.6 / 1 / 3.6 天大，全部被跳过（真实 profile 里 package.json 一直停在 09/19 没动过、
+ * pnpm 连操作日志都没产生）。
+ *
+ * dshmarket 自己的 `lib/install.js` 就是这么绕的：
+ *   export const RELEASE_AGE_OVERRIDE = '--config.minimumReleaseAge=0'
+ * 用户是**明确点了"更新到某个版本"**，属于知情操作；但不是静默绕过 ——
+ * 调用处会把这件事写进日志，让终端页留痕。
+ */
+const RELEASE_AGE_BYPASS = '--config.minimumReleaseAge=0'
+
+/**
+ * 清掉**残留**的 profile 写锁。
+ *
+ * `package.json.lock` 里存的是持有者的 PID。dsh 的写操作等这把锁是有超时的，超时直接失败：
+ * `atomic-write: timed out waiting for the writer lock at …`。
+ *
+ * 实测真实 profile 里躺着一个 5 字节的锁（内容 "6552"），创建于 09/24 13:44，
+ * 而 **PID 6552 早已不存在** —— 它把此后每一次插件操作都挡死：dsh 启动了、
+ * 写了 cordis.yml，然后卡在锁上等超时，pnpm 从未运行（所以连操作日志都没有）。
+ * 这就是"点了更新却什么都没发生"的根因，与发布年龄无关。
+ *
+ * **只在 PID 明确已死时才删** —— 探测得到说明真有操作在跑，绝不能碰。
+ */
+function clearStaleLock(onLine: (line: string) => void): void {
+  const lock = join(profileDir(PROFILE), 'package.json.lock')
+  let holder: number
+  try {
+    holder = Number.parseInt(readFileSync(lock, 'utf8').trim(), 10)
+  } catch {
+    return // 没有锁文件 / 读不了 —— 不是要处理的情况
+  }
+  if (!Number.isInteger(holder) || holder <= 0) return
+  try {
+    process.kill(holder, 0) // 只探测存在性，不真的发信号
+    return // 持有者还活着：确实有操作在跑
+  } catch {
+    // 持有者已死 → 残留锁
+  }
+  try {
+    unlinkSync(lock)
+    onLine(`[启动器] 清掉残留的 profile 写锁（持有者 PID ${holder} 已不存在）`)
+  } catch {
+    /* 删不掉就算了：dsh 自己会超时并给出错误 */
+  }
+}
+
 function run(args: string[], onLine: (line: string) => void): Promise<{ code: number; tail: string[] }> {
+  // 每次写 profile 前先处理残留锁，否则会白等到超时
+  clearStaleLock(onLine)
   const tail: string[] = []
   const KEEP = 40
   /**
@@ -150,6 +203,25 @@ function manifestDeps(): Record<string, string> {
 }
 
 /**
+ * 读 `node_modules` 里那个包**实际装到的版本**。读不到返回 null。
+ *
+ * 为什么需要它：清单里的声明（`package.json` 的 `dependencies`）不等于装上了什么。
+ * pnpm 的"最小发布年龄"闸会静默保留旧版本并以退出码 0 结束 —— 清单可能写着新版本，
+ * 磁盘上还是旧的。只查清单就会把这种情况当成更新成功。
+ */
+function installedVersion(packageName: string): string | null {
+  try {
+    const raw = readFileSync(
+      join(profileDir(PROFILE), 'node_modules', packageName, 'package.json'),
+      'utf8'
+    )
+    return (JSON.parse(raw) as { version?: string }).version ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
  * 把 pnpm 的输出过滤成给用户看的进度行。
  *
  * 原先只放行 `/error|ERR_|added \d+|removed \d+|Packages:|Done in|WARN/`，
@@ -183,7 +255,9 @@ export async function installPlugin(
     return
   }
 
-  const outcome = await run([dsh.bin, 'plugin', '--profile', PROFILE, 'add', packageName], (line) =>
+  const outcome = await run(
+    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', packageName, RELEASE_AGE_BYPASS],
+    (line) =>
     progressLine(line, onProgress)
   )
   if (outcome.code !== 0) {
@@ -268,7 +342,7 @@ export async function updatePlugin(
   onProgress({ phase: 'resolve', text: `把 ${packageName} 更新到 ${target}…` })
 
   const outcome = await run(
-    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', `${packageName}@${target}`],
+    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', `${packageName}@${target}`, RELEASE_AGE_BYPASS],
     (line) => progressLine(line, onProgress)
   )
   if (outcome.code !== 0) {
@@ -279,6 +353,19 @@ export async function updatePlugin(
   const after = manifestDeps()[packageName]
   if (after === undefined) {
     throw new Error(`命令成功退出，但 ${packageName} 从 profile 清单里消失了`)
+  }
+  /**
+   * **核对真正装上的版本**，不能只看清单 —— 这就是上次把"什么都没发生"当成
+   * 更新成功的原因（用户看到"已更新到 1.61.0"，实际磁盘上还是 1.47.0）。
+   */
+  const installed = installedVersion(packageName)
+  if (installed !== target) {
+    throw new Error(
+      `命令成功退出，但 ${packageName} 实际装的仍是 ${installed ?? '(读不到版本)'}，不是 ${target}。\n` +
+        '最常见的原因是 pnpm 的"最小发布年龄"保护静默跳过了较新的版本；' +
+        `本次已经带了 ${RELEASE_AGE_BYPASS} 仍然如此，说明是别的原因。\n` +
+        `${outcome.tail.slice(-10).join('\n')}`
+    )
   }
   onProgress({ phase: 'done', text: `${packageName} 已更新到 ${target}` })
 }
