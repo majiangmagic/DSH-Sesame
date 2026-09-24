@@ -15,6 +15,7 @@ import { app } from 'electron'
  *   args       额外启动参数 —— 追加到 `dsh <profile> …` 末尾
  *   profile    启动 profile —— 目前只有 `web` 能真正跑起来，见 runner 的守卫
  *   port       启动端口 —— 固定端口，默认 DEFAULT_PORT（原来是 `--port 0` 让系统随便挑）
+ *   dshHome    dsh 的数据目录（DSH_HOME）—— 空表示"用环境变量或默认 ~/.dsh"
  */
 /**
  * 默认启动端口。
@@ -32,6 +33,13 @@ export interface LauncherSettings {
   args: string
   profile: string
   port: number
+  /**
+   * dsh 的数据目录（`DSH_HOME`）。空串表示不指定。
+   *
+   * 优先级：**这里填了就用它** → 否则 `DSH_HOME` 环境变量 → 否则 `~/.dsh`。
+   * UI 里明确填的值优先，因为那是最具体的意图。
+   */
+  dshHome: string
 }
 
 const DEFAULTS: LauncherSettings = {
@@ -39,7 +47,8 @@ const DEFAULTS: LauncherSettings = {
   lang: 'zh',
   args: '',
   profile: 'web',
-  port: DEFAULT_PORT
+  port: DEFAULT_PORT,
+  dshHome: ''
 }
 
 function file(): string {
@@ -63,7 +72,9 @@ export function readSettings(): LauncherSettings {
     parsed.port >= 1024 &&
     parsed.port <= 65535
       ? parsed.port
-      : DEFAULTS.port
+      : DEFAULTS.port,
+  // 数据目录：允许空（= 用环境变量/默认），非空时去掉首尾空白
+  dshHome: typeof parsed.dshHome === 'string' ? parsed.dshHome.trim() : DEFAULTS.dshHome
     }
   } catch {
     return { ...DEFAULTS }

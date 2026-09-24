@@ -13,7 +13,7 @@ import type {
  * 真实实现。
  *
  *  - 版本：走 IPC 到主进程，真扫目录、真拉 registry、真用 npm 下载/卸载；
- *  - 启动 / 停止：走 IPC，主进程 spawn `dsh web --port 0` 并从输出里读就绪地址；
+ *  - 启动 / 停止：走 IPC，主进程 spawn `dsh web --port <设置里的端口>` 并从输出里读就绪地址；
  *  - 插件：走 IPC 到主进程，真读写真 profile 的 `cordis.patch.yml`；安装/卸载走
  *    dsh 自己的 `plugin` 命令（→ pnpm），不自己 npm install；
  *  - 终端：走 IPC，读主进程日志环形缓冲（dsh 子进程输出 + 操作事件）并实时订阅；

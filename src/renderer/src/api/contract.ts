@@ -46,6 +46,8 @@ export interface SettingsPayload {
   profile: string
   /** 启动端口（1024~65535）。固定端口，默认 3080；被占用时自动回退到系统分配的空闲端口 */
   port: number
+  /** dsh 数据目录（DSH_HOME）。空串 = 用 DSH_HOME 环境变量或默认的 ~/.dsh */
+  dshHome: string
 }
 
 export interface RunningState {
@@ -150,7 +152,7 @@ export interface ManagerApi {
   /* ---------------- 启动 / 停止 ---------------- */
 
   /**
-   * 启动一个版本：主进程 spawn `dsh web --host 127.0.0.1 --port 0 --no-open`，
+   * 启动一个版本：主进程 spawn `dsh web --host 127.0.0.1 --port <设置里的端口> --no-open`，
    * **等到 dsh 打印就绪地址才 resolve**。失败时消息里带子进程输出尾巴。
    */
   startVersion(version: string): Promise<RunningState>

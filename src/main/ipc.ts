@@ -163,6 +163,7 @@ export function registerBusinessIpc(): void {
         ...(patch.lang === 'en' || patch.lang === 'zh' ? { lang: patch.lang } : {}),
         ...(typeof patch.args === 'string' ? { args: patch.args } : {}),
         ...(typeof patch.profile === 'string' && patch.profile !== '' ? { profile: patch.profile } : {}),
+      ...(typeof patch.dshHome === 'string' ? { dshHome: patch.dshHome.trim() } : {}),
       ...(typeof patch.port === 'number' &&
       Number.isInteger(patch.port) &&
       patch.port >= 1024 &&

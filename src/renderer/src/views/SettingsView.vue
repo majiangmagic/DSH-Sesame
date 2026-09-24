@@ -92,6 +92,24 @@ onMounted(async () => {
         启动端口。固定端口的意义是"地址可预期"：能存书签、能记住。
         被占用时**自动回退**到系统分配的空闲端口，但会在终端页写明"哪个被占、为什么、换到了哪"
       -->
+      <!--
+        数据目录（DSH_HOME）。留空 = 用 DSH_HOME 环境变量或默认的 ~/.dsh。
+        改它等于换一整套数据目录 —— 界面会像"一个插件都没有"，那不是坏了，
+        是看的是另一个目录。正在运行的 dsh 要重启才会用新路径。
+      -->
+      <label class="form-row wide">
+        <span>{{ t('settings.dshHome') }}</span>
+        <input
+          id="dshHome"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          :placeholder="t('settings.dshHomePlaceholder')"
+          v-model="draft.dshHome"
+        />
+      </label>
+      <p class="status-line">{{ t('settings.dshHomeHint') }}</p>
+
       <label class="form-row">
         <span>{{ t('settings.port') }}</span>
         <input id="port" type="number" min="1024" max="65535" step="1" v-model.number="draft.port" />
