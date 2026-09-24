@@ -3,6 +3,7 @@
  *
  * 目录布局（D:\agent 下这个项目只有一个目录）：
  *   D:\agent\DSH-Sesame-release\           ← 成品目录
+ *       DSH-Sesame-Setup-0.1.0.exe
  *       DSH-Sesame-Setup-0.1.0.exe.blockmap
  *       latest.yml
  *       _stage\                             ← 打包暂存，发布完成后被删除
