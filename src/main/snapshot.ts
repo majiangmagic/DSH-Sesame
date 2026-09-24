@@ -152,6 +152,23 @@ export function restoreSnapshot(id: string): RestoreResult {
   return { restored, skipped, backupId: backup.id }
 }
 
+/**
+ * 删除一份快照。
+ *
+ * 只删这一份；不清 node_modules、不动 profile。
+ * id 里带路径分隔符的一律拒绝 —— 这是一条防目录穿越的底线：
+ * 这个函数按 id 直接拼路径，若 id 来自界面且含 ../，就会删到快照目录外面。
+ */
+export function deleteSnapshot(id: string): boolean {
+  if (id === '' || id.includes('/') || id.includes('\\') || id.includes('..')) {
+    throw new Error('快照 id 非法：' + id)
+  }
+  const dir = join(dirOf(readSettings().profile), id)
+  if (!existsSync(dir)) return false
+  rmSync(dir, { recursive: true, force: true })
+  return true
+}
+
 /** 诊断用：当前 profile 的配置目录与快照根（界面显示用） */
 export function snapshotPaths(): SnapshotPaths {
   return { profileDir: profileDir(readSettings().profile), root: snapshotRoot(), home: dshHome() }

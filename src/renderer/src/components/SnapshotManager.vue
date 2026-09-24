@@ -55,6 +55,21 @@ async function restore(id: string): Promise<void> {
   }
 }
 
+/** 删除一份快照。只删它，不动 profile；列表随之刷新 */
+async function remove(id: string): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await api.deleteSnapshot(id)
+    await refresh()
+    ui.showBubble(t('snap.removed'))
+  } catch (cause) {
+    ui.showBubble(cause instanceof Error ? cause.message : String(cause))
+  } finally {
+    busy.value = false
+  }
+}
+
 function when(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString()
@@ -101,6 +116,14 @@ onMounted(refresh)
             @click="restore(s.id)"
           >
             {{ t('snap.restore') }}
+          </button>
+          <button
+            type="button"
+            class="subtle-button"
+            :disabled="busy"
+            @click="remove(s.id)"
+          >
+            {{ t('snap.remove') }}
           </button>
         </li>
       </ul>

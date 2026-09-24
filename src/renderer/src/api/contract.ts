@@ -96,6 +96,8 @@ export interface ManagerApi {
   createSnapshot(label: string): Promise<SnapshotEntry>
   /** 快照：回退（回退前自动先存一份当前状态） */
   restoreSnapshot(id: string): Promise<RestoreResult>
+  /** 快照：删除一份 */
+  deleteSnapshot(id: string): Promise<boolean>
 
   getPlugins(): Promise<PluginList>
 

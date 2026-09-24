@@ -14,6 +14,8 @@ const enUS: typeof zhCN = {
     labelPlaceholder: "e.g. state before upgrade",
     create: "Save one",
     restore: "Restore",
+    remove: "Delete",
+    removed: "Snapshot deleted",
     files: "files",
     keep: "Keeps at most 10; the oldest is pruned. A snapshot is also taken automatically before plugin install/update/toggle.",
     created: "Snapshot saved",

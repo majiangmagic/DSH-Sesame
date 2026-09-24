@@ -27,6 +27,7 @@ import { diagnose } from './diagnose'
  */
 import {
   createSnapshot,
+  deleteSnapshot,
   listSnapshots as listPluginSnapshots,
   restoreSnapshot,
   snapshotPaths
@@ -76,6 +77,9 @@ export function registerBusinessIpc(): void {
   )
   ipcMain.handle(SNAPSHOT_CHANNELS.restore, (_event: IpcMainInvokeEvent, id: string) =>
     restoreSnapshot(id)
+  )
+  ipcMain.handle(SNAPSHOT_CHANNELS.remove, (_event: IpcMainInvokeEvent, id: string) =>
+    deleteSnapshot(id)
   )
 
   ipcMain.handle(VERSION_CHANNELS.overview, () => overview())

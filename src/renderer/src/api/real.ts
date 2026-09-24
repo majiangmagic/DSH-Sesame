@@ -36,6 +36,7 @@ export const realApi: ManagerApi = {
   snapshotPaths: (): Promise<SnapshotPaths> => window.sesame.snapshot.paths(),
   createSnapshot: (label: string): Promise<SnapshotEntry> => window.sesame.snapshot.create(label),
   restoreSnapshot: (id: string): Promise<RestoreResult> => window.sesame.snapshot.restore(id),
+  deleteSnapshot: (id: string): Promise<boolean> => window.sesame.snapshot.remove(id),
 
   async getPlugins(): Promise<PluginList> {
     const list = await window.sesame.plugins.list()

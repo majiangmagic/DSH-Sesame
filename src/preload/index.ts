@@ -153,7 +153,9 @@ const api = {
     /** 手动存一份 */
     create: (label: string): Promise<SnapshotEntry> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.create, label),
     /** 回退到指定快照（回退前会自动先存一份当前状态） */
-    restore: (id: string): Promise<RestoreResult> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.restore, id)
+    restore: (id: string): Promise<RestoreResult> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.restore, id),
+    /** 删除一份快照（只删它，不动 profile） */
+    remove: (id: string): Promise<boolean> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.remove, id)
   },
 
   diagnose: {

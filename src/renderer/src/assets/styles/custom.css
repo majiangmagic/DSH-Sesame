@@ -802,8 +802,16 @@ select {
  *   这也是为什么先前修了下拉框、设置页这两个仍然是白的。）
  */
 .preferences select,
-.preferences input[type='text'],
-.preferences input[type='number'] {
+/*
+ * 输入框与下拉框的**外观**（背景、边框、内边距、字号、颜色）。
+ *
+ * 这条原来写在 .preferences 作用域里 —— 于是别的页面（快照页）的输入框
+ * 既没有深色背景也没有边框，回落到浏览器默认的**白底**，字几乎看不清。
+ * 这是"逐页复制规则"这个毛病第四次咬人（对齐两次、宽度一次、外观这次），
+ * 所以改成按**语义**（表单行）写一次，所有页面共用。
+ */
+.form-row input[type='text'],
+.form-row input[type='number'] {
   background: rgba(13, 20, 36, 0.92);
   color: var(--text);
   border: 1px solid var(--line);

@@ -12,6 +12,8 @@ export default {
     labelPlaceholder: "例如：升级前的状态",
     create: "存一份",
     restore: "回退到此",
+    remove: "删除",
+    removed: "已删除该快照",
     files: "个文件",
     keep: "最多保留 10 份，超出自动删最旧的。插件安装/升级/开关之前会自动存一份。",
     created: "已存快照",
