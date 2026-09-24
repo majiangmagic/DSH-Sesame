@@ -169,7 +169,6 @@ const enUS: typeof zhCN = {
     argsPlaceholder: 'e.g. --log-level debug',
     argsHint:
       'Appended to the end of the dsh command line (split on spaces; quote values with spaces). Installed plugins and data are unaffected.',
-    portHint: 'Port the dsh web server binds (default 3080). If it is taken, the launcher falls back to a free port and says so',
     dataDir: 'Version directory',
     browse: 'Browse…',
     save: 'Save',

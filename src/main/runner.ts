@@ -126,10 +126,10 @@ function bootArgs(profile: string, port: number): string[] {
   /*
    * 端口来自设置（默认 3080），**不再是 0**。
    *
-   * 原来 `--port 0` 让系统挑空闲端口：永不会冲突，但每次地址都变，用户没法收藏、
+   * 原来 `--port 0` 让系统挑空闲端口：永不会冲突，但每次地址都变，用户没法收藏、也没法记住。
    * 也没法记住。现在固定端口；被占用时 dsh 会绑不上，而启动器要等满
    * `START_TIMEOUT_MS`（180 秒）才报"就绪超时"—— 那个错误完全看不出是端口问题。
-   * 所以 startVersion 里先前置探测一次端口（见 assertPortFree）。
+   * 现在固定端口；被占用时 startVersion 先探测，再**回退到系统分配**并写一行日志说明（见 resolvePort）。
    */
   return [
     profile,
