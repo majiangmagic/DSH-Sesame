@@ -282,12 +282,20 @@ onMounted(() => {
                 market.busyName === identityOf(plugin) ? t('market.uninstalling') : t('market.uninstall')
               }}
             </button>
+            <!--
+              npm 字段为空的条目不给出下载入口：安装入参要用**真 npm 包名**，
+              退回短名会装上同名的另一个包（目录里确有这种记录，例如 4 个 dsh-pet 里有两个 npm 为空）。
+            -->
             <button
               v-else
               class="subtle-button"
               type="button"
-              :disabled="market.busyName === identityOf(plugin)"
-              :title="t('market.installTitle', { command: installCommand(plugin) })"
+              :disabled="market.busyName === identityOf(plugin) || market.noNpmName(plugin)"
+              :title="
+                market.noNpmName(plugin)
+                  ? t('market.noNpmHint')
+                  : t('market.installTitle', { command: installCommand(plugin) })
+              "
               @click="market.install(identityOf(plugin))"
             >
               {{ market.busyName === identityOf(plugin) ? t('market.installing') : t('market.install') }}

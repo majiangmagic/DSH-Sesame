@@ -156,7 +156,13 @@ export const useMarketStore = defineStore('market', () => {
     const needle = query.value.trim().toLowerCase()
     const picked = category.value
     const list = plugins.value.filter((plugin) => {
-      if (onlyInstalled.value && !installedNames.value.has(identityOf(plugin))) return false
+      // 与 isInstalled 用同一套判定：**只认 npm 包名**。这里曾经用 identityOf（npm 为空时
+      // 退回短名），结果 catalog 里两个 npm 为空的同名 dsh-pet 也被算成"已装"，
+      // 用户只装了一个却看到三行。
+      if (onlyInstalled.value) {
+        const npm = (plugin.npm ?? '').trim()
+        if (npm === '' || !installedNames.value.has(npm)) return false
+      }
       if (picked !== '' && !(plugin.category ?? []).includes(picked)) return false
       if (needle === '') return true
       // 名称、作者与简介都参与匹配：目录里中文简介往往比包名更好搜
@@ -225,9 +231,26 @@ export const useMarketStore = defineStore('market', () => {
     pageSize.value += PAGE_STEP
   }
 
-  /** 「已装」按 npm 包名判断（见 identityOf 的说明） */
+  /**
+   * 目录条目缺 npm 包名。
+   *
+   * 这种条目既不能判断"是不是已装"，也**不能从市场安装** —— 入参要用真 npm 包名，
+   * 退回短名会装上同名的另一个包。目录里确有这种记录（详见 isInstalled 的说明）。
+   */
+  function noNpmName(plugin: MarketPlugin): boolean {
+    return (plugin.npm ?? '').trim() === ''
+  }
+
+  /**
+   * 「已装」**只认 npm 包名**，不用 identityOf 的短名回退。
+   *
+   * 目录里同一个短名可能对应不同作者的不同项目（例如 4 个 dsh-pet），其中一些的 npm
+   * 字段是空的。用短名回退会把它们都算成"已装"，用户看到自己的一个插件变成三四行；
+   * 而且版本、更新目标也都是错的。所以这里严格按 npm 名比 —— 空 npm 一律不算已装。
+   */
   function isInstalled(plugin: MarketPlugin): boolean {
-    return installedNames.value.has(identityOf(plugin))
+    const npm = (plugin.npm ?? '').trim()
+    return npm !== '' && installedNames.value.has(npm)
   }
 
   /**
@@ -251,7 +274,9 @@ export const useMarketStore = defineStore('market', () => {
    * （比如某些条目写的是范围或占位）—— 一律返回空串，不猜。
    */
   function updateTarget(plugin: MarketPlugin): string {
-    const current = installedVersions.value.get(identityOf(plugin))
+    const npm = (plugin.npm ?? '').trim()
+    if (npm === '') return ''
+    const current = installedVersions.value.get(npm)
     if (!current) return ''
     const latest = String(plugin.version ?? '').trim()
     if (!/^\d/.test(latest)) return ''
@@ -367,6 +392,7 @@ export const useMarketStore = defineStore('market', () => {
     setSort,
     loadMore,
     isInstalled,
+    noNpmName,
     sameIdentityCount,
     install,
     uninstall
