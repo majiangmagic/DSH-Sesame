@@ -16,6 +16,12 @@ export type PluginReason = '' | 'no-rows' | 'official' | 'market-owned'
 export interface PluginEntry {
   name: string
   version: string
+  /**
+   * profile 的 package.json 里写的版本范围或来源，例如 `^0.19.1`、`~1.2.0`、
+   * `github:owner/repo#<sha>`。用来判断"能不能用版本号更新"：
+   * git / file / link 这类来源没有"更新到某版本"的语义，界面上不该给更新按钮。
+   */
+  spec: string
   /** 这个包拥有的 loader 行 id；空数组意味着没有可写的行 */
   ids: string[]
   enabled: boolean

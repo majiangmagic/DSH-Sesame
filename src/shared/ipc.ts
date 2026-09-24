@@ -36,6 +36,8 @@ export const PLUGIN_CHANNELS = {
   setEnabled: 'plugins:set-enabled',
   /** 通过 dsh 自己的 plugin 命令安装一个插件 */
   install: 'plugins:install',
+  /** 把一个已装插件更新到指定版本 */
+  update: 'plugins:update',
   /** 通过 dsh 自己的 plugin 命令卸载一个插件 */
   uninstall: 'plugins:uninstall',
   /** 主进程 → 渲染层的插件增删进度 */

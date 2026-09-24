@@ -237,6 +237,26 @@ onMounted(() => {
             >
               {{ t('market.repo') }}
             </button>
+            <!--
+              装了但市场里版本更新 → 先给「更新到 x.y.z」。
+              目标版本由 store 的 updateTarget() 判定（只认两边都能比的情况），
+              这里不自己算。更新与卸载可以并存：想升就升，想撤就撤。
+            -->
+            <button
+              v-if="market.updateTarget(plugin)"
+              class="subtle-button"
+              type="button"
+              :disabled="market.busyName === identityOf(plugin)"
+              :title="t('market.updateTitle', { version: market.updateTarget(plugin) })"
+              @click="market.update(identityOf(plugin), market.updateTarget(plugin))"
+            >
+              {{
+                market.busyName === identityOf(plugin)
+                  ? t('market.updating')
+                  : `${t('market.update')} ${market.updateTarget(plugin)}`
+              }}
+            </button>
+
             <!-- 已装 → 卸载；未装 → 下载。入参一律是真 npm 包名（identityOf） -->
             <button
               v-if="market.isInstalled(plugin)"

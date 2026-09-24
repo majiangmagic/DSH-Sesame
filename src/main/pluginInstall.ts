@@ -190,3 +190,52 @@ export async function uninstallPlugin(
   }
   onProgress({ phase: 'done', text: `${packageName} 已卸载` })
 }
+
+/**
+ * 把一个已装插件更新到指定版本。
+ *
+ * 走的是同一个透传通道：`dsh plugin --profile web add <包>@<版本>`（→ pnpm）。
+ * 用 `add <包>@<版本>` 而不是 pnpm 的 `update`：`update` 受 package.json 里的范围约束
+ * （`^0.19.1` 不会跨到 `0.20.0`），会出现"界面说有新版、点了却没动"。显式指定版本，
+ * 按钮承诺什么就装什么。pnpm 默认 save-prefix 是 `^`，所以清单里会写成 `^<版本>`。
+ *
+ * @param target - 目标版本号（**不带** `^`/`~` 前缀）。界面通常传市场目录里的 version。
+ */
+export async function updatePlugin(
+  packageName: string,
+  target: string,
+  onProgress: (progress: PluginProgress) => void = () => {}
+): Promise<void> {
+  if (packageName.startsWith('@deepseek-ai/')) {
+    throw new Error(`${packageName} 是 dsh 官方组件，不通过启动器更新`)
+  }
+  const spec = manifestDeps()[packageName]
+  if (spec === undefined) {
+    throw new Error(`${packageName} 不在 profile 的依赖里，无法更新`)
+  }
+  // git / file / link 之类来源没有"更新到某版本"的语义 —— 硬装会把用户的固定指认改掉
+  if (!/^[\^~]?\d/.test(spec.trim())) {
+    throw new Error(`${packageName} 在清单里的来源是「${spec}」，不是版本号，没有可更新的版本`)
+  }
+  if (!/^\d/.test(target.trim())) {
+    throw new Error(`目标版本不合法：${target}`)
+  }
+
+  const dsh = pickDsh()
+  onProgress({ phase: 'resolve', text: `把 ${packageName} 更新到 ${target}…` })
+
+  const outcome = await run(
+    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', `${packageName}@${target}`],
+    (line) => progressLine(line, onProgress)
+  )
+  if (outcome.code !== 0) {
+    throw new Error(
+      `更新 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`
+    )
+  }
+  const after = manifestDeps()[packageName]
+  if (after === undefined) {
+    throw new Error(`命令成功退出，但 ${packageName} 从 profile 清单里消失了`)
+  }
+  onProgress({ phase: 'done', text: `${packageName} 已更新到 ${target}` })
+}

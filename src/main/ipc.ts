@@ -10,7 +10,7 @@ import {
   type VersionProgressEvent
 } from '@shared/ipc'
 import { installVersion, uninstallVersion } from './installer'
-import { installPlugin, uninstallPlugin } from './pluginInstall'
+import { installPlugin, uninstallPlugin, updatePlugin } from './pluginInstall'
 import { startVersion, stopVersion } from './runner'
 import { listPlugins, setPluginEnabled } from './patch'
 import { profileDir } from './dshHome'
@@ -97,6 +97,20 @@ export function registerBusinessIpc(): void {
     await uninstallPlugin(packageName, pluginProgress(event, packageName))
     pushTagged('启动器', `${packageName} 已卸载`)
   })
+
+  // 更新：走 `add <包>@<版本>`。目标版本由界面给（通常来自市场目录的 version），
+  // 主进程只做校验与核对，不自己去猜"最新版是多少" —— 那样会多一次网络往返，
+  // 而且可能与界面上显示的目标版本不一致。
+  ipcMain.handle(
+    PLUGIN_CHANNELS.update,
+    async (event: IpcMainInvokeEvent, packageName: string, target: string) => {
+      if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
+      if (typeof target !== 'string' || target === '') throw new Error('缺少目标版本')
+      pushTagged('启动器', `更新插件 ${packageName} → ${target}`)
+      await updatePlugin(packageName, target, pluginProgress(event, packageName))
+      pushTagged('启动器', `${packageName} 已更新到 ${target}`)
+    }
+  )
 
   // --- 内置市场库 ---
 

@@ -135,6 +135,9 @@ export default {
     uninstall: '卸载',
     uninstalling: '卸载中…',
     uninstallTitle: '卸载命令：{command}',
+    update: '更新',
+    updating: '更新中…',
+    updateTitle: '更新到 {version}',
     installPending: '安装动作尚未接入'
   },
 

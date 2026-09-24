@@ -98,6 +98,30 @@ export const realApi: ManagerApi = {
     }
   },
 
+  /**
+   * 插件更新：走 dsh 的 plugin 命令（`add <包>@<版本>`）。
+   *
+   * 不复用 installPlugin 的入参拼法：那条路径只接包名、并且会以"清单里已有"为由直接返回
+   * （它把"已装"当成"不用装"），对更新是错的。
+   */
+  async updatePlugin(
+    packageName: string,
+    target: string,
+    onProgress?: (progress: PluginInstallProgress) => void
+  ): Promise<void> {
+    const off = onProgress
+      ? window.sesame.plugins.onProgress((event) => {
+          if (event.packageName !== packageName) return
+          onProgress({ phase: event.phase, text: event.text })
+        })
+      : null
+    try {
+      await window.sesame.plugins.update(packageName, target)
+    } finally {
+      off?.()
+    }
+  },
+
   /** 插件卸载：同样走 dsh 的 plugin 命令（`remove`），官方组件由主进程拦下 */
   async uninstallPlugin(
     packageName: string,

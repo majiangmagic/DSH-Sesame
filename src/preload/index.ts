@@ -89,6 +89,10 @@ const api = {
     uninstall: (packageName: string): Promise<void> =>
       ipcRenderer.invoke(PLUGIN_CHANNELS.uninstall, packageName),
 
+    /** 把一个已装插件更新到指定版本（`add <包>@<版本>`，版本号不带 ^/~/前缀） */
+    update: (packageName: string, target: string): Promise<void> =>
+      ipcRenderer.invoke(PLUGIN_CHANNELS.update, packageName, target),
+
     /** 订阅插件增删进度，返回取消订阅函数 */
     onProgress: (listener: (event: PluginProgressEvent) => void): (() => void) => {
       const handler = (_event: unknown, payload: PluginProgressEvent): void => listener(payload)

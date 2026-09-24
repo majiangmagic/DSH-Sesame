@@ -64,12 +64,14 @@ export function descriptionOf(plugin: MarketPlugin): string {
 export const useMarketStore = defineStore('market', () => {
   const catalog = ref<MarketCatalog | null>(null)
   const installedNames = ref<Set<string>>(new Set())
+  /** npm 包名 → 已装版本。市场里的版本比它高，就是"有更新" */
+  const installedVersions = ref<Map<string, string>>(new Map())
   const loading = ref(false)
   const error = ref('')
 
   const query = ref('')
   const category = ref('')
-  const sort = ref<MarketSort>('default')
+  const sort = ref<MarketSort>('stars')
   /** 正在安装或卸载的包名（两者不会同时发生，共用一个字段） */
   const busyName = ref<string | null>(null)
   /** 主进程推回来的进度文案（pnpm 的输出行） */
@@ -180,6 +182,7 @@ export const useMarketStore = defineStore('market', () => {
       const [cat, plugins] = await Promise.all([api.getMarketCatalog('china'), api.getPlugins()])
       catalog.value = cat
       installedNames.value = new Set(plugins.plugins.map((plugin) => plugin.name))
+      installedVersions.value = new Map(plugins.plugins.map((plugin) => [plugin.name, plugin.version]))
       loaded.value = true
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
@@ -213,6 +216,34 @@ export const useMarketStore = defineStore('market', () => {
     return installedNames.value.has(identityOf(plugin))
   }
 
+  /**
+   * 比较两个版本号。只认数字段，够用即可 —— 这里只回答"目录里的是不是更新"。
+   * 返回 >0 表示 a 更新。不处理 pre-release 的复杂排序（目录里的 version 基本是正式版）。
+   */
+  function compareVersions(a: string, b: string): number {
+    const pa = a.split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0)
+    const pb = b.split(/[.+-]/).map((x) => Number.parseInt(x, 10) || 0)
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+      if (d !== 0) return d
+    }
+    return 0
+  }
+
+  /**
+   * 有更新时返回目标版本号，否则返回空串。
+   *
+   * 只在**两边都能比**的时候给答案：没装过、目录没给版本、目录的 version 不是数字开头
+   * （比如某些条目写的是范围或占位）—— 一律返回空串，不猜。
+   */
+  function updateTarget(plugin: MarketPlugin): string {
+    const current = installedVersions.value.get(identityOf(plugin))
+    if (!current) return ''
+    const latest = String(plugin.version ?? '').trim()
+    if (!/^\d/.test(latest)) return ''
+    return compareVersions(latest, current) > 0 ? latest : ''
+  }
+
   /** 这个标识在目录里有几个条目（>1 表示确实撞了） */
   function sameIdentityCount(plugin: MarketPlugin): number {
     return identityCounts.value.get(identityOf(plugin)) ?? 1
@@ -231,6 +262,30 @@ export const useMarketStore = defineStore('market', () => {
     error.value = ''
     try {
       await api.installPlugin(name, (progress) => {
+        progressText.value = progress.text
+      })
+      await load(true)
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause)
+    } finally {
+      busyName.value = null
+      progressText.value = ''
+    }
+  }
+
+  /**
+   * 更新一个插件到指定版本。
+   *
+   * 与安装同一个通道（`add <包>@<版本>`），所以同样用 busyName 表示"这个包正在被改动"。
+   * 目标版本由 `updateTarget` 从目录里取，不在这里自己判断"哪个是最新"。
+   */
+  async function update(name: string, target: string): Promise<void> {
+    if (busyName.value !== null) return
+    busyName.value = name
+    progressText.value = ''
+    error.value = ''
+    try {
+      await api.updatePlugin(name, target, (progress) => {
         progressText.value = progress.text
       })
       await load(true)
@@ -274,7 +329,7 @@ export const useMarketStore = defineStore('market', () => {
     error,
     query,
     category,
-    sort,
+    sort,    updateTarget,    update,
     busyName,
     progressText,
     plugins,

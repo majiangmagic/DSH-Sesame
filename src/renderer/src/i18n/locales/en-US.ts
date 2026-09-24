@@ -136,6 +136,9 @@ const enUS: typeof zhCN = {
     uninstall: 'Uninstall',
     uninstalling: 'Uninstalling…',
     uninstallTitle: 'Uninstall command: {command}',
+    update: 'Update',
+    updating: 'Updating…',
+    updateTitle: 'Update to {version}',
     installPending: 'Installing is not wired up yet'
   },
 

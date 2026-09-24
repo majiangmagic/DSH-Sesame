@@ -124,6 +124,21 @@ export interface ManagerApi {
     onProgress?: (progress: PluginInstallProgress) => void
   ): Promise<void>
 
+  /**
+   * 把一个已装插件更新到指定版本。
+   *
+   * 与安装走同一个透传通道（`add <包>@<版本>` → pnpm）。用 `add` 而不是 pnpm 的 `update`：
+   * `update` 受 package.json 里的范围约束（`^0.19.1` 不会跨到 `0.20.0`），
+   * 会出现"界面说有新版、点了却没动"。显式指定版本，按钮承诺什么就装什么。
+   *
+   * @param target - 目标版本号（**不带** `^`/`~` 前缀）。界面通常传市场目录里的 `version`。
+   */
+  updatePlugin(
+    packageName: string,
+    target: string,
+    onProgress?: (progress: PluginInstallProgress) => void
+  ): Promise<void>
+
   /** 卸载一个插件（`dsh plugin ... remove`）。`@deepseek-ai/*` 官方组件不允许卸。 */
   uninstallPlugin(
     packageName: string,

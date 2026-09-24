@@ -161,7 +161,16 @@ export function listPlugins(dir: string, profile = 'web'): PluginList {
       toggleable = false
       reason = 'market-owned'
     }
-    return { name, version: packageVersion(dir, name), ids, enabled: !disabled, toggleable, reason, official }
+    return {
+      name,
+      version: packageVersion(dir, name),
+      spec: manifest.dependencies?.[name] ?? '',
+      ids,
+      enabled: !disabled,
+      toggleable,
+      reason,
+      official
+    }
   })
   return { profile, profileDir: dir, patchPath, plugins, disables: state.disables }
 }
