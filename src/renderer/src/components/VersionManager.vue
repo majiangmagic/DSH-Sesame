@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useVersionsStore } from '@/stores/versions'
@@ -132,6 +132,5 @@ onMounted(() => {
     <template v-else-if="store.remoteError">
       {{ t('versions.remoteFailed', { message: store.remoteError }) }}
     </template>
-    <template v-else>{{ t('versions.rootHint', { dir: store.root }) }}</template>
   </p>
 </template>

@@ -76,7 +76,6 @@ export default {
     managedMeta: '本应用安装',
     notInstalled: '尚未安装',
     localOnly: '本地版本（远端列表里没有）',
-    rootHint: '版本装在 {dir}；插件和数据始终在用户目录的 .dsh，卸载版本不会带走它们。',
     remoteFailed: '读不到远端版本：{message}'
   },
 

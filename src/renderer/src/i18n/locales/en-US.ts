@@ -78,8 +78,6 @@ const enUS: typeof zhCN = {
     managedMeta: 'Installed by this app',
     notInstalled: 'Not installed',
     localOnly: 'Local version (not in the remote list)',
-    rootHint:
-      'Versions are installed in {dir}; plugins and data always live in .dsh in your home directory and are not removed with a version.',
     remoteFailed: 'Could not read the remote version list: {message}'
   },
 
