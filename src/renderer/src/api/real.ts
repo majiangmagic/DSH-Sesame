@@ -1,8 +1,8 @@
-import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/market'
+﻿import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/market'
 import type { PluginList } from '@shared/plugins'
 import type { VersionOverview } from '@shared/versions'
 import type { DiagnosisResult } from '@shared/diagnose'
-import type { RestoreResult, SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
 import type {
   InstallProgress,
   ManagerApi,
@@ -37,6 +37,7 @@ export const realApi: ManagerApi = {
   createSnapshot: (label: string): Promise<SnapshotEntry> => window.sesame.snapshot.create(label),
   restoreSnapshot: (id: string): Promise<RestoreResult> => window.sesame.snapshot.restore(id),
   deleteSnapshot: (id: string): Promise<boolean> => window.sesame.snapshot.remove(id),
+  snapshotPlan: (): Promise<SnapshotPreview> => window.sesame.snapshot.plan(),
 
   async getPlugins(): Promise<PluginList> {
     const list = await window.sesame.plugins.list()

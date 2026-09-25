@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api'
 import { useUiStore } from '@/stores/ui'
-import type { SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
+import type { SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
 
 /**
  * 快照管理。
@@ -20,20 +20,49 @@ const list = ref<SnapshotEntry[]>([])
 const paths = ref<SnapshotPaths | null>(null)
 const label = ref('')
 const busy = ref(false)
+/** 存之前的预演（平铺的插件列表 + node_modules 大小） */
+const preview = ref<SnapshotPreview | null>(null)
+const showPreview = ref(false)
 
 async function refresh(): Promise<void> {
   list.value = await api.listSnapshots()
   paths.value = await api.snapshotPaths()
 }
 
-async function create(): Promise<void> {
+/** 字节 → MB（界面只显示整数兆） */
+function mb(bytes: number): string {
+  return (bytes / 1024 / 1024).toFixed(0) + ' MB'
+}
+
+/**
+ * 点「存一份」：**先弹窗让用户看一眼**，不直接开存。
+ *
+ * 因为存一次要把整个 node_modules 压缩（几百 MB、几十秒），
+ * 让用户先知道"会打包哪些插件、多大"再确认，比点完等半天好。
+ */
+async function askCreate(): Promise<void> {
   if (busy.value) return
   busy.value = true
   try {
-    await api.createSnapshot(label.value)
+    preview.value = await api.snapshotPlan()
+    showPreview.value = true
+  } catch (cause) {
+    ui.showBubble(cause instanceof Error ? cause.message : String(cause))
+  } finally {
+    busy.value = false
+  }
+}
+
+/** 弹窗里那个**唯一**的「确定」：真正开始存 */
+async function confirmCreate(): Promise<void> {
+  if (busy.value) return
+  busy.value = true
+  try {
+    const entry = await api.createSnapshot(label.value)
     label.value = ''
+    showPreview.value = false
     await refresh()
-    ui.showBubble(t('snap.created'))
+    ui.showBubble(entry.reused ? t('snap.reused') : t('snap.created'))
   } catch (cause) {
     ui.showBubble(cause instanceof Error ? cause.message : String(cause))
   } finally {
@@ -94,7 +123,7 @@ onMounted(refresh)
             :placeholder="t('snap.labelPlaceholder')"
             v-model="label"
           />
-          <button id="snapCreate" type="button" class="subtle-button" :disabled="busy" @click="create">
+          <button id="snapCreate" type="button" class="subtle-button" :disabled="busy" @click="askCreate">
             {{ t('snap.create') }}
           </button>
         </div>
@@ -131,4 +160,35 @@ onMounted(refresh)
       <p class="status-line" id="snapKeep">{{ t('snap.keep') }}</p>
     </div>
   </div>
+
+  <!--
+    存之前的确认弹窗。
+    规格（用户定）：**平铺列出插件**（不做 npm / 非 npm 分类）+ **只有一个「确定」**。
+    结构照抄 components/overlays/NoticeOverlay.vue 的 class，不新增 CSS；
+    Teleport 到 body —— 祖先带 transform 时 position:fixed 会相对祖先定位（踩过）。
+  -->
+  <Teleport to="body">
+    <div v-if="showPreview && preview" class="confirm-layer" id="snapPreview">
+      <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="snapPreviewTitle">
+        <h2 class="confirm-title" id="snapPreviewTitle">{{ t('snap.previewTitle') }}</h2>
+
+        <p class="banner-text" id="snapPreviewModules">
+          <template v-if="preview.willPack">
+            {{ t('snap.willPack', { n: preview.plugins.length, size: mb(preview.modulesBytes) }) }}
+          </template>
+          <template v-else>{{ t('snap.noModules') }}</template>
+        </p>
+
+        <ul class="banner-text" id="snapPreviewPlugins" v-if="preview.plugins.length > 0">
+          <li v-for="p in preview.plugins" :key="p.name">{{ p.name }}{{ p.version ? '  ' + p.version : '' }}</li>
+        </ul>
+
+        <div class="confirm-actions">
+          <button type="button" class="main-button" id="snapConfirm" :disabled="busy" @click="confirmCreate">
+            {{ t('snap.confirm') }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
 </template>

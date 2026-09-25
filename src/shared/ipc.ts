@@ -131,6 +131,7 @@ export const SNAPSHOT_CHANNELS = {
   create: 'snapshot:create',
   restore: 'snapshot:restore',
   remove: 'snapshot:remove',
+  plan: 'snapshot:plan',
   paths: 'snapshot:paths'
 } as const
 

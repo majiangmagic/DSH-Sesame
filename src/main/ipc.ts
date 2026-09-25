@@ -1,4 +1,4 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+﻿import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   DIAGNOSE_CHANNELS,
   LOG_CHANNELS,
@@ -30,7 +30,8 @@ import {
   deleteSnapshot,
   listSnapshots as listPluginSnapshots,
   restoreSnapshot,
-  snapshotPaths
+  snapshotPaths,
+  snapshotPreview
 } from './snapshot'
 
 /**
@@ -81,6 +82,8 @@ export function registerBusinessIpc(): void {
   ipcMain.handle(SNAPSHOT_CHANNELS.remove, (_event: IpcMainInvokeEvent, id: string) =>
     deleteSnapshot(id)
   )
+  // 存之前的预演：弹窗里那两份列表（npm / 非 npm）
+  ipcMain.handle(SNAPSHOT_CHANNELS.plan, () => snapshotPreview())
 
   ipcMain.handle(VERSION_CHANNELS.overview, () => overview())
 

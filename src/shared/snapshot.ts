@@ -64,28 +64,33 @@ export interface SnapshotPaths {
   home: string
 }
 
-/** 弹窗里列表的一行 */
+/**
+ * 存快照前的预演（弹窗里显示什么就是什么，点「确定」才真的存）。
+ *
+ * **刻意不做任何分类**：打包是全量的，所以只要把"有哪些插件"平铺列出来就行。
+ * 之前加过 npm / 非 npm 的分类，那是多余的一层 —— 分类不准还会误导，
+ * 而全量打包本来就不需要知道来源。
+ */
+export interface SnapshotPreview {
+  /** 平铺的插件列表（来自 profile 的 package.json dependencies） */
+  plugins: SnapshotPluginRef[]
+  /** 会被一起存的配置文件 */
+  configFiles: string[]
+  /** 要打包的 node_modules 目录 */
+  modulesDir: string
+  /** 该目录当前的大小（字节；不存在为 0） */
+  modulesBytes: number
+  /** 该目录是否存在（不存在就没得打包） */
+  willPack: boolean
+  /** 上一份快照的时间（没有就空串）—— 让用户知道值不值得再存 */
+  lastAt: string
+  /** 上一份快照里整包的大小 */
+  lastModulesBytes: number
+}
+
+/** 弹窗里插件列表的一行 */
 export interface SnapshotPluginRef {
   name: string
   /** 已安装的版本（读不到就空串） */
   version: string
-  /** 来源说明：普通版本号 / link:… / github:… / 手工放入 node_modules */
-  source: string
-}
-
-/**
- * 存快照前的预演（弹窗里那两份列表）。
- *
- * 打包是**全量**的，所以这两份列表不是"决定打包谁"，而是告诉用户：
- * 哪些插件能从 registry 装回来（npm），哪些**离开快照就找不回来**（非 npm）。
- */
-export interface SnapshotPlan {
-  /** 能从 registry 装回来的直接依赖 */
-  npm: SnapshotPluginRef[]
-  /** 只能靠这份快照留存的（link / file / git / 手工放入） */
-  nonNpm: SnapshotPluginRef[]
-  /** 要打包的目录 */
-  modulesDir: string
-  /** 该目录是否存在（不存在就没得打包） */
-  willPack: boolean
 }

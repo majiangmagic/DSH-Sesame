@@ -1,6 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron'
+﻿import { contextBridge, ipcRenderer } from 'electron'
 import type { DiagnosisResult } from '@shared/diagnose'
-import type { RestoreResult, SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
 import {
   LOG_CHANNELS,
   MARKET_CHANNELS,
@@ -155,7 +155,9 @@ const api = {
     /** 回退到指定快照（回退前会自动先存一份当前状态） */
     restore: (id: string): Promise<RestoreResult> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.restore, id),
     /** 删除一份快照（只删它，不动 profile） */
-    remove: (id: string): Promise<boolean> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.remove, id)
+    remove: (id: string): Promise<boolean> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.remove, id),
+    /** 存之前的预演：npm / 非 npm 两份列表 */
+    plan: (): Promise<SnapshotPreview> => ipcRenderer.invoke(SNAPSHOT_CHANNELS.plan)
   },
 
   diagnose: {

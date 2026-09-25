@@ -1,8 +1,8 @@
-import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate } from '@shared/market'
+﻿import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate } from '@shared/market'
 import type { PluginEntry, PluginList, PluginReason } from '@shared/plugins'
 import type { VersionOverview, VersionStatus } from '@shared/versions'
 import type { DiagnosisResult } from '@shared/diagnose'
-import type { RestoreResult, SnapshotEntry, SnapshotPaths } from '@shared/snapshot'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
 
 /**
  * 接口契约 —— 只有类型，没有实现。
@@ -99,6 +99,8 @@ export interface ManagerApi {
   restoreSnapshot(id: string): Promise<RestoreResult>
   /** 快照：删除一份 */
   deleteSnapshot(id: string): Promise<boolean>
+  /** 快照：存之前的预演（弹窗里那两份列表） */
+  snapshotPlan(): Promise<SnapshotPreview>
 
   getPlugins(): Promise<PluginList>
 
