@@ -26,7 +26,15 @@ import { dshHome, profileDir } from './dshHome'
 import { dataRoot } from './paths'
 import { readSettings } from './settings'
 import { currentRun } from './runner'
-import type { RestoreResult, SnapshotEntry, SnapshotModules, SnapshotPaths, SnapshotTrigger } from '@shared/snapshot'
+import type {
+  RestoreResult,
+  SnapshotEntry,
+  SnapshotModules,
+  SnapshotPaths,
+  SnapshotPlan,
+  SnapshotPluginRef,
+  SnapshotTrigger
+} from '@shared/snapshot'
 
 /** 快照的文件清单（照 dsh-plugin-guard）。顺序即界面上的展示顺序。 */
 export const SNAPSHOT_FILES = [
@@ -280,7 +288,154 @@ export function deleteSnapshot(id: string): boolean {
   return true
 }
 
-/** 诊断用：当前 profile 的配置目录与快照根（界面显示用） */
+/**
+ * 读 lockfile 的 `importers` 段，拿到每个直接依赖的**原始声明**（specifier）。
+ *
+ * 为什么不自己解析整个 YAML：以前两次手写 YAML 解析都误报了（没吃住带引号的 scope 名）。
+ * 但 importers 这一小段的形状是固定的：`<6空格><名字>:` 后面跟 `<8空格>specifier: <原文>`，
+ * 所以只认这两行，并且**用真实文件验过**才敢用。
+ */
+function declaredSpecifiers(profilePath: string): Map<string, string> {
+  const out = new Map<string, string>()
+  const lock = join(profilePath, 'pnpm-lock.yaml')
+  if (!existsSync(lock)) return out
+  const lines = readFileSync(lock, 'utf8').split(/\r?\n/)
+
+  /*
+   * **按相对缩进**解析，不写死空格数。
+   *
+   * 第一版写死了 `^ {6}` / `^ {8}`，而真实文件里是 8 / 10 —— 靠肉眼看夹具的
+   * lockfile 才发现（`specifier:` 在 10 空格处，正则匹配不上，分类必然全错）。
+   * 现在改成：记住 `dependencies:` 的列号，键在它 +2，specifier 在更深一层。
+   */
+  let depsIndent = -1
+  let lastName = ''
+  for (const line of lines) {
+    if (line.trim() === '') continue
+    const indent = (line.match(/^\s*/) ?? [''])[0].length
+
+    if (/^\s*dependencies:\s*$/.test(line)) {
+      depsIndent = indent
+      lastName = ''
+      continue
+    }
+    if (depsIndent < 0) continue
+    // 缩进回到 dependencies 同级或更浅 → 这一段结束
+    if (indent <= depsIndent) {
+      depsIndent = -1
+      continue
+    }
+    if (indent === depsIndent + 2) {
+      const key = /^\s+(?:'([^']+)'|([^:]+?)):\s*$/.exec(line)
+      if (key) lastName = (key[1] ?? key[2] ?? '').trim()
+      continue
+    }
+    if (indent > depsIndent + 2 && lastName !== '') {
+      const spec = /^\s+specifier:\s*(.+)$/.exec(line)
+      if (spec) {
+        out.set(lastName, spec[1].trim())
+        lastName = ''
+      }
+    }
+  }
+  return out
+}
+
+/** 来源不是 registry 的判定（这些插件离开快照就找不回来） */
+function isExternalSource(spec: string): boolean {
+  return /link:|file:|github|git\+|tarball|https?:/i.test(spec)
+}
+
+/**
+ * 打包前的预演：弹窗里那两份列表。
+ *
+ * npm 插件  = 声明为普通版本号（能从 registry 装回来）
+ * 非 npm    = ① 声明为 link/file/git/tarball，② node_modules 里有但 pnpm 记录里没有的
+ *             （后者包括"手工拷进去的私人插件"）
+ *
+ * 注意：**打包是全量的**，这两份列表只用来告诉用户"哪些插件离开快照就找不回来"。
+ */
+export function snapshotPlan(): SnapshotPlan {
+  const profile = readSettings().profile
+  const dir = profileDir(profile)
+  const specs = declaredSpecifiers(dir)
+  const pkgFile = join(dir, 'package.json')
+  let deps: string[] = []
+  try {
+    const parsed = JSON.parse(readFileSync(pkgFile, 'utf8')) as { dependencies?: Record<string, string> }
+    deps = Object.keys(parsed.dependencies ?? {})
+  } catch {
+    deps = []
+  }
+
+  const npm: SnapshotPluginRef[] = []
+  const nonNpm: SnapshotPluginRef[] = []
+  for (const name of deps) {
+    const spec = specs.get(name) ?? ''
+    const version = readInstalledVersion(join(dir, 'node_modules', name))
+    const row: SnapshotPluginRef = { name, version, source: spec || '(未在 lockfile 里找到)' }
+    ;(isExternalSource(spec) ? nonNpm : npm).push(row)
+  }
+
+  // 手工塞进 node_modules 的：pnpm 自己的记录（.modules.yaml 的 hoistedLocations）里没有
+  const placed = new Set<string>()
+  try {
+    const mod = JSON.parse(readFileSync(join(dir, 'node_modules', '.modules.yaml'), 'utf8')) as {
+      hoistedLocations?: Record<string, string[]>
+    }
+    for (const key of Object.keys(mod.hoistedLocations ?? {})) {
+      const at = key.lastIndexOf('@')
+      placed.add(at > 0 ? key.slice(0, at) : key)
+    }
+  } catch {
+    // 没有这个文件（没装过东西）就跳过这一层
+  }
+  const declared = new Set(deps)
+  const nm = join(dir, 'node_modules')
+  if (existsSync(nm)) {
+    for (const entry of readdirSync(nm)) {
+      if (entry.startsWith('.')) continue
+      const names: string[] = []
+      let st: ReturnType<typeof lstatSync> | null = null
+      try {
+        st = lstatSync(join(nm, entry))
+      } catch {
+        continue
+      }
+      if (!st.isDirectory() && !st.isSymbolicLink()) continue
+      if (entry.startsWith('@')) {
+        try {
+          for (const sub of readdirSync(join(nm, entry))) names.push(`${entry}/${sub}`)
+        } catch {
+          /* 忽略 */
+        }
+      } else {
+        names.push(entry)
+      }
+      for (const n of names) {
+        if (declared.has(n) || placed.has(n)) continue
+        nonNpm.push({ name: n, version: readInstalledVersion(join(nm, n)), source: '手工放入 node_modules' })
+      }
+    }
+  }
+
+  return { npm, nonNpm, modulesDir: nm, willPack: existsSync(nm) }
+}
+
+/** 读一个已安装包的版本号（读不到就空串） */
+function readInstalledVersion(pkgDir: string): string {
+  try {
+    const parsed = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')) as { version?: string }
+    return typeof parsed.version === 'string' ? parsed.version : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 超时上限：整包很大时 tar 也要时间，但别让界面无限等。
+ * 调用方（IPC）不设超时，这里只做说明用。
+ */
 export function snapshotPaths(): SnapshotPaths {
   return { profileDir: profileDir(readSettings().profile), root: snapshotRoot(), home: dshHome() }
 }

@@ -63,3 +63,29 @@ export interface SnapshotPaths {
   root: string
   home: string
 }
+
+/** 弹窗里列表的一行 */
+export interface SnapshotPluginRef {
+  name: string
+  /** 已安装的版本（读不到就空串） */
+  version: string
+  /** 来源说明：普通版本号 / link:… / github:… / 手工放入 node_modules */
+  source: string
+}
+
+/**
+ * 存快照前的预演（弹窗里那两份列表）。
+ *
+ * 打包是**全量**的，所以这两份列表不是"决定打包谁"，而是告诉用户：
+ * 哪些插件能从 registry 装回来（npm），哪些**离开快照就找不回来**（非 npm）。
+ */
+export interface SnapshotPlan {
+  /** 能从 registry 装回来的直接依赖 */
+  npm: SnapshotPluginRef[]
+  /** 只能靠这份快照留存的（link / file / git / 手工放入） */
+  nonNpm: SnapshotPluginRef[]
+  /** 要打包的目录 */
+  modulesDir: string
+  /** 该目录是否存在（不存在就没得打包） */
+  willPack: boolean
+}
