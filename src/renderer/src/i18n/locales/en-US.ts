@@ -1,4 +1,4 @@
-﻿import type zhCN from './zh-CN'
+import type zhCN from './zh-CN'
 
 /**
  * English copy.
@@ -198,7 +198,7 @@ const enUS: typeof zhCN = {
     profile: 'Start profile',
     port: 'Startup port',
     poolDir: 'Version location',
-    poolDirPlaceholder: 'default <install dir parent>/DSH-Sesame-data',
+    poolDirPlaceholder: 'default <app directory>/dsh',
     snapshotDir: 'Snapshot folder',
     snapshotDirPlaceholder: 'default <version location>/snapshots',    dshHome: 'Data directory (DSH_HOME)',
     dshHomePlaceholder: 'default <user home>/.dsh',

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 中文文案。
  *
  * 本文件是文案的**唯一真相**：key 命名约定是 `<区域>.<用途>`，与
@@ -198,7 +198,7 @@ export default {
     profile: '启动 profile',
     port: '启动端口',
     poolDir: '版本位置',
-    poolDirPlaceholder: '默认<安装目录父级>/DSH-Sesame-data',
+    poolDirPlaceholder: '默认<软件目录>/dsh',
     snapshotDir: "快照目录",
     snapshotDirPlaceholder: '默认<版本位置>/snapshots',
     dshHome: '插件与数据目录（.dsh）',
