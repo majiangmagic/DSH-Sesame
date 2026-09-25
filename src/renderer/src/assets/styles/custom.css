@@ -1199,6 +1199,11 @@ main,
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 占满整行可用宽度：原来只有 259px，而"默认<版本位置>/snapshots"这类
+     占位文字会被截断（用户反馈"没显示全"）。只影响这一种行，不碰普通整行输入框。 */
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .form-row.wide .inline-input input {
