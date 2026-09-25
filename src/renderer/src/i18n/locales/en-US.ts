@@ -197,6 +197,8 @@ const enUS: typeof zhCN = {
     advanced: 'Advanced',
     profile: 'Start profile',
     port: 'Startup port',
+    poolDir: 'Version location',
+    poolDirPlaceholder: 'Empty = default location',
     snapshotDir: 'Snapshot folder',
     snapshotDirPlaceholder: 'Empty = snapshots under the app folder',
     dshHome: 'Data directory (DSH_HOME)',

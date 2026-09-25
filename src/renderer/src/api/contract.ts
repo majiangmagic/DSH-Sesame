@@ -51,6 +51,7 @@ export interface SettingsPayload {
   /** dsh 数据目录（DSH_HOME）。空串 = 用 DSH_HOME 环境变量或默认的 ~/.dsh */
   dshHome: string,
   snapshotDir: string
+  poolDir: string
 }
 
 export interface RunningState {

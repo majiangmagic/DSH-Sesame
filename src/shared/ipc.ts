@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 主进程 ↔ 渲染层共用的通道名。
  *
  * 分两组：
@@ -96,6 +96,7 @@ export interface LauncherSettingsPayload {
   /** dsh 数据目录（DSH_HOME）。空串 = 用环境变量或默认的 ~/.dsh */
   dshHome: string,
   snapshotDir: string
+  poolDir: string
 }
 
 /** 安装进度推送的载荷 */

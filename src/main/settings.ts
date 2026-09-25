@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 
@@ -47,6 +47,8 @@ export interface LauncherSettings {
    * 另外打包后安装目录会被覆盖安装清空，介意的人也能指到安装目录之外。
    */
   snapshotDir: string
+  /** 版本池位置。留空 = 应用目录隔壁的 DSH-Sesame-data\dsh（不写死盘符） */
+  poolDir: string
 }
 
 const DEFAULTS: LauncherSettings = {
@@ -56,6 +58,7 @@ const DEFAULTS: LauncherSettings = {
   profile: 'web',
   port: DEFAULT_PORT,
   dshHome: '',
+  poolDir: '',
   snapshotDir: ''
 }
 
@@ -84,7 +87,8 @@ export function readSettings(): LauncherSettings {
   // 数据目录：允许空（= 用环境变量/默认），非空时去掉首尾空白
   dshHome: typeof parsed.dshHome === 'string' ? parsed.dshHome.trim() : DEFAULTS.dshHome,
   snapshotDir:
-    typeof parsed.snapshotDir === 'string' ? parsed.snapshotDir.trim() : DEFAULTS.snapshotDir
+    typeof parsed.snapshotDir === 'string' ? parsed.snapshotDir.trim() : DEFAULTS.snapshotDir,
+  poolDir: typeof parsed.poolDir === 'string' ? parsed.poolDir.trim() : DEFAULTS.poolDir
     }
   } catch {
     return { ...DEFAULTS }

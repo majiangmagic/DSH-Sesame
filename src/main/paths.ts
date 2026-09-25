@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+﻿import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { app } from 'electron'
+import { readSettings } from './settings'
 
 /**
  * DSH-Sesame 的数据根目录。
@@ -31,6 +32,10 @@ export function appDir(): string {
  * 优先级：`SESAME_DATA_DIR` 环境变量 > 便携版自己那 > 应用目录的隔壁。
  */
 export function dataRoot(): string {
+  // 设置页里指定的优先（用户可改到别的盘）
+  const fromSettings = readSettings().poolDir
+  if (typeof fromSettings === 'string' && fromSettings.trim() !== '') return fromSettings.trim()
+
   const fromEnv = process.env.SESAME_DATA_DIR
   if (typeof fromEnv === 'string' && fromEnv.trim() !== '') return fromEnv.trim()
 
