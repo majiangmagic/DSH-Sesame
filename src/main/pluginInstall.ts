@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+﻿import { spawn } from 'node:child_process'
 import { decodeChunk } from './textDecode'
 import { existsSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
@@ -301,7 +301,21 @@ export async function uninstallPlugin(
     throw new Error(`${packageName} 不在 profile 的依赖里，无法卸载`)
   }
 
-  const outcome = await run([dsh.bin, 'plugin', '--profile', PROFILE, 'remove', packageName], (line) =>
+  /*
+   * 卸载也要带 RELEASE_AGE_BYPASS。
+   *
+   * `pnpm remove` 同样会**校验整个 lockfile** 的供应链策略 —— 只要 lockfile 里有
+   * 一条"发布太新"的记录（哪怕是别的包、哪怕不涉及本次卸载），整条命令就会被拒绝：
+   *   [ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] …
+   *   The lockfile contains entries that the active policies reject.
+   * 实测：用户卸载 dsh-tavern 时被 dsh-tavern@2.5.0 与它的传递依赖 dsh-muv-engine@0.3.10
+   * 两条"太新"记录挡住，退出码 1。
+   *
+   * 卸载**不会引入任何新包**，所以绕过发布年龄策略没有供应链风险。
+   */
+  const outcome = await run(
+    [dsh.bin, 'plugin', '--profile', PROFILE, 'remove', packageName, RELEASE_AGE_BYPASS],
+    (line) =>
     progressLine(line, onProgress)
   )
   if (outcome.code !== 0) {
