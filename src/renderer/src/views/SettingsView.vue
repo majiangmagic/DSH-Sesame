@@ -138,6 +138,7 @@ onMounted(async () => {
           </button>
         </div>
       </label>
+      <p class="status-line">{{ t('settings.dshHomeHint') }}</p>
 
       <label class="form-row wide">
         <span>{{ t('settings.snapshotDir') }}</span>
@@ -155,6 +156,7 @@ onMounted(async () => {
           </button>
         </div>
       </label>
+      <p class="status-line">{{ t('settings.snapshotDirHint') }}</p>
 
       <label class="form-row wide">
         <span>{{ t('settings.poolDir') }}</span>
@@ -172,6 +174,7 @@ onMounted(async () => {
           </button>
         </div>
       </label>
+      <p class="status-line">{{ t('settings.poolDirHint') }}</p>
 
       <label class="form-row">
         <span>{{ t('settings.port') }}</span>
