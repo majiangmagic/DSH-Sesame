@@ -200,7 +200,7 @@ export default {
     poolDir: '版本位置',
     poolDirPlaceholder: '默认<软件目录>/dsh',
     snapshotDir: "快照目录",
-    snapshotDirPlaceholder: '默认<版本位置>/snapshots',
+    snapshotDirPlaceholder: '默认<软件目录>/snapshots',
     dshHome: '插件与数据目录（.dsh）',
     dshHomePlaceholder: '默认<用户主目录>/.dsh',
     uiLang: '界面语言',
