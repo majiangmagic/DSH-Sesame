@@ -9,18 +9,19 @@
  *   cordis.yml           profile 根（MCP 实例等配置的落点）
  *   cordis.patch.yml     每个插件的**开关状态**
  *
- * 存放位置：`<userData>/snapshots/<profile>/<stamp>/`
- *   刻意**不放安装目录** —— 覆盖安装会把安装目录整个清空（本会话实测过：
- *   版本池就是这么丢的），而快照恰恰要在"出事时"还在，所以放 userData。
+ * 存放位置：`<数据根目录>/snapshots/<profile>/<stamp>/`
+ *   数据根目录 = 应用目录的**隔壁**（`<安装目录的父目录>/DSH-Sesame-data`，见 paths.ts）。
+ *   刻意**不放安装目录里面** —— 覆盖安装会把它整个清空（本会话实测过：用户的
+ *   1.1 GB 版本池就是这么丢的），而快照恰恰要在"出事时"还在。
  *
  * 回退语义：
  *   · 只写回文件。**回退前先自动存一份当前状态**（否则回退本身不可逆）。
  *   · 不自动跑 pnpm install —— node_modules 的同步是另一件事，界面上会说明。
  */
-import { app } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { dshHome, profileDir } from './dshHome'
+import { dataRoot } from './paths'
 import { readSettings } from './settings'
 import { currentRun } from './runner'
 import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotTrigger } from '@shared/snapshot'
@@ -51,9 +52,8 @@ export const SNAPSHOT_KEEP = 10
 export function snapshotRoot(): string {
   const custom = readSettings().snapshotDir
   if (typeof custom === 'string' && custom.trim() !== '') return custom.trim()
-  // 打包后用 exe 所在目录，开发时用项目目录
-  const base = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath()
-  return join(base, 'snapshots')
+  // 默认放**数据根目录**下（应用目录的隔壁）—— 安装包不会碰它，见 paths.ts 的说明
+  return join(dataRoot(), 'snapshots')
 }
 
 function dirOf(profile: string): string {
