@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { api } from '@/api'
@@ -57,10 +57,12 @@ async function askCreate(): Promise<void> {
 async function confirmCreate(): Promise<void> {
   if (busy.value) return
   busy.value = true
+  // **先关弹窗**再开存：压缩整个 node_modules 要几十秒，不该让用户盯着一个卡住的弹窗。
+  // 之前是存完才关，实测发现弹窗会一直留在那里。
+  showPreview.value = false
   try {
     const entry = await api.createSnapshot(label.value)
     label.value = ''
-    showPreview.value = false
     await refresh()
     ui.showBubble(entry.reused ? t('snap.reused') : t('snap.created'))
   } catch (cause) {

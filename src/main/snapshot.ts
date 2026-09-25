@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 插件配置快照 —— 手动 / 自动存，最多 10 份，可回退。
  *
  * 快照的**文件清单照 dsh-plugin-guard**（它实测过这套够用）：
@@ -166,7 +166,19 @@ export function createSnapshot(trigger: SnapshotTrigger, label = ''): SnapshotEn
    * 如果每次都真打一遍，很快就是几个 GB。指纹一样说明上一份已经完全覆盖了当前状态。
    */
   const modulesDir = join(src, 'node_modules')
-  const fingerprint = existsSync(modulesDir) ? fingerprintOf(modulesDir) : ''
+  /*
+   * 指纹必须**同时覆盖 node_modules 与那 5 个配置文件**。
+   *
+   * 踩过的坑：一开始只算 node_modules，于是"只改了配置、依赖没动"会被判成
+   * "内容与上一份相同" → 回退前那份 pre-rollback **静默不生成**。
+   * 而回退本身可逆正是靠那一份 —— 这种误判会让人以为有退路、实际没有。
+   */
+  const modulesPrint = existsSync(modulesDir) ? fingerprintOf(modulesDir) : ''
+  const configPrint = SNAPSHOT_FILES.map((name) => {
+    const f = join(src, name)
+    return existsSync(f) ? createHash('sha256').update(readFileSync(f)).digest('hex') : '-'
+  }).join(',')
+  const fingerprint = createHash('sha256').update(modulesPrint + '|' + configPrint).digest('hex')
   const latest = listSnapshots()[0]
   if (latest && fingerprint !== '' && latest.fingerprint === fingerprint) {
     return { ...latest, reused: true }
