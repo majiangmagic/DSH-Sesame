@@ -18,13 +18,15 @@
  *   · 只写回文件。**回退前先自动存一份当前状态**（否则回退本身不可逆）。
  *   · 不自动跑 pnpm install —— node_modules 的同步是另一件事，界面上会说明。
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { dshHome, profileDir } from './dshHome'
 import { dataRoot } from './paths'
 import { readSettings } from './settings'
 import { currentRun } from './runner'
-import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotTrigger } from '@shared/snapshot'
+import type { RestoreResult, SnapshotEntry, SnapshotModules, SnapshotPaths, SnapshotTrigger } from '@shared/snapshot'
 
 /** 快照的文件清单（照 dsh-plugin-guard）。顺序即界面上的展示顺序。 */
 export const SNAPSHOT_FILES = [
@@ -74,6 +76,67 @@ function readManifest(dir: string): SnapshotEntry | null {
 }
 
 /**
+ * 算 node_modules 的内容指纹（文件清单 + 大小 + 修改时间）。
+ *
+ * 遍历 1.4 万个文件大约 1~2 秒，比真打一次包（几十秒）便宜得多 ——
+ * 所以先用它判断"这一份和上一份一样吗"，一样就完全跳过打包。
+ */
+function fingerprintOf(dir: string): string {
+  const h = createHash('sha256')
+  const walk = (cur: string, rel: string): void => {
+    let entries: string[]
+    try {
+      entries = readdirSync(cur).sort()
+    } catch {
+      return
+    }
+    for (const name of entries) {
+      const full = join(cur, name)
+      const r = rel === '' ? name : rel + '/' + name
+      let st: ReturnType<typeof lstatSync>
+      try {
+        st = lstatSync(full)
+      } catch {
+        continue
+      }
+      if (st.isDirectory()) {
+        h.update('D' + r + '\n')
+        walk(full, r)
+      } else {
+        h.update('F' + r + '|' + st.size + '|' + Math.round(st.mtimeMs) + '\n')
+      }
+    }
+  }
+  walk(dir, '')
+  return h.digest('hex')
+}
+
+/**
+ * 把整个 node_modules 打成一个 tgz。
+ *
+ * 用**系统自带的 tar**（Win10+ 都有）：比 PowerShell 的 Compress-Archive 快很多，
+ * 支持长路径，而且不用为此引一个新依赖进来。
+ */
+function tarCreate(profileDirPath: string, outFile: string): void {
+  const r = spawnSync('tar', ['-czf', outFile, '-C', profileDirPath, 'node_modules'], { windowsHide: true })
+  if (r.status !== 0) {
+    throw new Error(`打包 node_modules 失败（tar 退出码 ${r.status}）：${String(r.stderr || '').slice(0, 200)}`)
+  }
+}
+
+/** 把 tgz 解回 profile 目录（同名覆盖） */
+function tarExtract(file: string, intoDir: string): void {
+  const r = spawnSync('tar', ['-xzf', file, '-C', intoDir], { windowsHide: true })
+  if (r.status !== 0) {
+    throw new Error(`解包失败（tar 退出码 ${r.status}）：${String(r.stderr || '').slice(0, 200)}`)
+  }
+}
+
+function sha256Of(file: string): string {
+  return createHash('sha256').update(readFileSync(file)).digest('hex')
+}
+
+/**
  * 存一份快照。
  *
  * @param trigger 'manual' 用户点按钮；'auto' 插件变更前；'pre-rollback' 回退前自动存
@@ -87,6 +150,20 @@ export function createSnapshot(trigger: SnapshotTrigger, label = ''): SnapshotEn
 
   const id = stamp()
   const dest = join(dirOf(profile), id)
+
+  /*
+   * 先去重：node_modules 的内容与最新一份**完全相同**时，什么都不做。
+   *
+   * 全量打包一次上百 MB、几十秒 —— 插件的自动存档（每次开关/安装前都会调到这里）
+   * 如果每次都真打一遍，很快就是几个 GB。指纹一样说明上一份已经完全覆盖了当前状态。
+   */
+  const modulesDir = join(src, 'node_modules')
+  const fingerprint = existsSync(modulesDir) ? fingerprintOf(modulesDir) : ''
+  const latest = listSnapshots()[0]
+  if (latest && fingerprint !== '' && latest.fingerprint === fingerprint) {
+    return { ...latest, reused: true }
+  }
+
   mkdirSync(dest, { recursive: true })
 
   const copied: string[] = []
@@ -99,6 +176,14 @@ export function createSnapshot(trigger: SnapshotTrigger, label = ''): SnapshotEn
     bytes += statSync(join(dest, name)).size
   }
 
+  // 全量打包 node_modules —— 不再区分 npm / 私有来源，全都在包里，也就不会漏
+  let modules: SnapshotModules | null = null
+  if (existsSync(modulesDir)) {
+    const tgz = join(dest, 'modules.tgz')
+    tarCreate(src, tgz)
+    modules = { file: 'modules.tgz', bytes: statSync(tgz).size, sha256: sha256Of(tgz) }
+  }
+
   const entry: SnapshotEntry = {
     id,
     at: new Date().toISOString(),
@@ -107,7 +192,9 @@ export function createSnapshot(trigger: SnapshotTrigger, label = ''): SnapshotEn
     trigger,
     label,
     files: copied,
-    bytes
+    bytes,
+    modules,
+    fingerprint
   }
   writeFileSync(join(dest, 'manifest.json'), JSON.stringify(entry, null, 2), 'utf8')
   prune(profile)
@@ -163,7 +250,17 @@ export function restoreSnapshot(id: string): RestoreResult {
     copyFileSync(from, join(dest, name))
     restored.push(name)
   }
-  return { restored, skipped, backupId: backup.id }
+  // 整包也解回去。快照里没有整包 = 那次内容与最新一份相同、被去重跳过了，
+  // 那种情况下上一份快照里已经有同样的整包，回退到它即可。
+  let modulesRestored = false
+  if (manifest.modules) {
+    const tgz = join(src, manifest.modules.file)
+    if (existsSync(tgz)) {
+      tarExtract(tgz, dest)
+      modulesRestored = true
+    }
+  }
+  return { restored, skipped, backupId: backup.id, modulesRestored }
 }
 
 /**
