@@ -45,6 +45,4 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: DSH-Sesame
-  # 卸载/覆盖安装时保留版本池与快照（见 build/installer.nsh）
-  include: build/installer.nsh
   artifactName: DSH-Sesame-Setup-${version}.${ext}
