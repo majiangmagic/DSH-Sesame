@@ -64,6 +64,15 @@ watch(
  * 选数据目录。走主进程的原生选择器（渲染层没有 Node）。
  * 取消时**不要清空**已有值 —— 用户按了取消，不是要清掉。
  */
+/**
+ * 选快照目录。默认位置在应用目录下的 snapshots，C 盘紧张时用户可以挪走。
+ * 同样：取消时不要清空已有值。
+ */
+async function pickSnapshotDir(): Promise<void> {
+  const picked = await window.sesame.window.pickDirectory()
+  if (picked !== null && draft.value) draft.value.snapshotDir = picked
+}
+
 async function pickDshHome(): Promise<void> {
   const picked = await window.sesame.window.pickDirectory()
   if (picked !== null && draft.value) draft.value.dshHome = picked
@@ -119,6 +128,23 @@ onMounted(async () => {
             v-model="draft.dshHome"
           />
           <button class="subtle-button" id="pickDshHome" type="button" @click="pickDshHome">
+            {{ t('settings.browse') }}
+          </button>
+        </div>
+      </label>
+
+      <label class="form-row wide">
+        <span>{{ t('settings.snapshotDir') }}</span>
+        <div class="inline-input">
+          <input
+            id="snapshotDir"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            :placeholder="t('settings.snapshotDirPlaceholder')"
+            v-model="draft.snapshotDir"
+          />
+          <button class="subtle-button" id="pickSnapshotDir" type="button" @click="pickSnapshotDir">
             {{ t('settings.browse') }}
           </button>
         </div>

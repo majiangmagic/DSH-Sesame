@@ -40,6 +40,13 @@ export interface LauncherSettings {
    * UI 里明确填的值优先，因为那是最具体的意图。
    */
   dshHome: string
+  /**
+   * 快照存放目录。留空 = 用默认位置（应用目录下的 snapshots）。
+   *
+   * 之所以做成可配：默认位置在应用目录里，C 盘紧张的用户要能挪到别的盘；
+   * 另外打包后安装目录会被覆盖安装清空，介意的人也能指到安装目录之外。
+   */
+  snapshotDir: string
 }
 
 const DEFAULTS: LauncherSettings = {
@@ -48,7 +55,8 @@ const DEFAULTS: LauncherSettings = {
   args: '',
   profile: 'web',
   port: DEFAULT_PORT,
-  dshHome: ''
+  dshHome: '',
+  snapshotDir: ''
 }
 
 function file(): string {
@@ -74,7 +82,9 @@ export function readSettings(): LauncherSettings {
       ? parsed.port
       : DEFAULTS.port,
   // 数据目录：允许空（= 用环境变量/默认），非空时去掉首尾空白
-  dshHome: typeof parsed.dshHome === 'string' ? parsed.dshHome.trim() : DEFAULTS.dshHome
+  dshHome: typeof parsed.dshHome === 'string' ? parsed.dshHome.trim() : DEFAULTS.dshHome,
+  snapshotDir:
+    typeof parsed.snapshotDir === 'string' ? parsed.snapshotDir.trim() : DEFAULTS.snapshotDir
     }
   } catch {
     return { ...DEFAULTS }

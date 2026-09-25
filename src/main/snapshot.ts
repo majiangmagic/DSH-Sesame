@@ -19,7 +19,7 @@
  */
 import { app } from 'electron'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { dshHome, profileDir } from './dshHome'
 import { readSettings } from './settings'
 import { currentRun } from './runner'
@@ -38,8 +38,22 @@ export const SNAPSHOT_FILES = [
 export const SNAPSHOT_KEEP = 10
 
 
+/**
+ * 快照根目录。
+ *
+ * 默认放在**应用目录**下的 snapshots（用户要求 —— C 盘紧张，快照要跟软件一起放 D 盘）：
+ *   开发时 = 项目目录/snapshots
+ *   打包后 = 安装目录/snapshots
+ *
+ * 设置里可改（snapshotDir），因为打包后的安装目录**会被覆盖安装清空** ——
+ * 介意的人可以指到安装目录之外。
+ */
 export function snapshotRoot(): string {
-  return join(app.getPath('userData'), 'snapshots')
+  const custom = readSettings().snapshotDir
+  if (typeof custom === 'string' && custom.trim() !== '') return custom.trim()
+  // 打包后用 exe 所在目录，开发时用项目目录
+  const base = app.isPackaged ? dirname(app.getPath('exe')) : app.getAppPath()
+  return join(base, 'snapshots')
 }
 
 function dirOf(profile: string): string {

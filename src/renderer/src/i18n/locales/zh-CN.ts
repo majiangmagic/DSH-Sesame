@@ -193,6 +193,8 @@ export default {
     advanced: '高级设置',
     profile: '启动 profile',
     port: '启动端口',
+    snapshotDir: "快照目录",
+    snapshotDirPlaceholder: "留空 = 放在应用目录下的 snapshots",
     dshHome: '数据目录（DSH_HOME）',
     dshHomePlaceholder: '留空 = 默认',
     uiLang: '界面语言',

@@ -94,7 +94,8 @@ export interface LauncherSettingsPayload {
   /** 启动端口（1024~65535）。固定端口，默认 3080；被占用时自动回退到系统分配的空闲端口 */
   port: number
   /** dsh 数据目录（DSH_HOME）。空串 = 用环境变量或默认的 ~/.dsh */
-  dshHome: string
+  dshHome: string,
+  snapshotDir: string
 }
 
 /** 安装进度推送的载荷 */
