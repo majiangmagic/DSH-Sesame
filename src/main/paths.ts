@@ -25,11 +25,11 @@ export function appDir(): string {
 /**
  * 数据根目录（版本池、快照都放这里）。
  *
- * **刻意放在应用目录的隔壁**，而不是应用目录里面：
+ * **刻意放在软件目录下**，而不是应用目录里面：
  * 覆盖安装/卸载时 NSIS 会把安装目录整个删掉 —— 本会话实测过，
- * 用户的 1.1 GB 版本池就是这么没的。放隔壁后，安装包一行都不用改就安全了。
+ * 用户的 1.1 GB 版本池就是这么没的 —— 所以安装脚本里补了保护（见 build/installer.nsh）。
  *
- * 优先级：`SESAME_DATA_DIR` 环境变量 > 便携版自己那 > 应用目录的隔壁。
+ * 优先级：`SESAME_DATA_DIR` 环境变量 > 便携版自己那 > 软件目录下。
  */
 export function dataRoot(): string {
   // 设置页里指定的优先（用户可改到别的盘）
@@ -45,7 +45,7 @@ export function dataRoot(): string {
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
   if (portableDir) return portableDir
 
-  return join(dirname(appDir()), 'DSH-Sesame-data')
+  return appDir()
 }
 
 /**
