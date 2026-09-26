@@ -225,6 +225,8 @@ export function registerBusinessIpc(): void {
         ...(typeof patch.args === 'string' ? { args: patch.args } : {}),
         ...(typeof patch.profile === 'string' && patch.profile !== '' ? { profile: patch.profile } : {}),
       ...(typeof patch.dshHome === 'string' ? { dshHome: patch.dshHome.trim() } : {}),
+      ...(typeof patch.snapshotDir === 'string' ? { snapshotDir: patch.snapshotDir.trim() } : {}),
+      ...(typeof patch.poolDir === 'string' ? { poolDir: patch.poolDir.trim() } : {}),
       ...(typeof patch.port === 'number' &&
       Number.isInteger(patch.port) &&
       patch.port >= 1024 &&
