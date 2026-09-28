@@ -1,6 +1,6 @@
-﻿import { spawn } from 'node:child_process'
+﻿import { execFileSync, spawn } from 'node:child_process'
 import { decodeChunk } from './textDecode'
-import { existsSync, readFileSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { cmpVer, parseVer } from './registry'
 import { dshHome, profileDir } from './dshHome'
@@ -91,6 +91,39 @@ const RELEASE_AGE_BYPASS = '--config.minimumReleaseAge=0'
  *
  * **只在 PID 明确已死时才删** —— 探测得到说明真有操作在跑，绝不能碰。
  */
+function isHolderAlive(pid: number): boolean {
+  /*
+   * 判断"锁的持有者是否真在跑"。
+   *
+   * 只用 process.kill(pid, 0) 探测存在性在**跨机器**时是错的：
+   * profile 连 `package.json.lock` 一起被拷到另一台机器后，锁里记的是**原机器**的 PID，
+   * 而在新机器上那个数字很可能正好对应一个无关的活进程（Windows PID 会循环复用）
+   * → 被判成"持有者还活着" → 锁永远不清 → dsh 每次写 profile 都白等到超时。
+   * 表现就是"换台机器点更新一直卡死、pnpm 从未运行、连操作日志都没有"。
+   *
+   * 所以：存在性 + **进程名**双重确认。名字不像 node/dsh/pnpm 的一律不认。
+   */
+  try {
+    process.kill(pid, 0)
+  } catch {
+    return false // 进程不存在 → 残留锁
+  }
+  try {
+    const out = execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true
+    })
+    const line = out.split(/\r?\n/).find((l) => l.trim() !== '')
+    if (!line) return false
+    const name = (line.split('","')[0] ?? '').replace(/^"/, '').toLowerCase()
+    return /node|dsh|pnpm|electron/.test(name)
+  } catch {
+    // 查不出来就保守认为它活着：宁可等 dsh 自己超时，也不误删真在跑的锁
+    return true
+  }
+}
+
 function clearStaleLock(onLine: (line: string) => void): void {
   const lock = join(profileDir(PROFILE), 'package.json.lock')
   let holder: number
@@ -100,15 +133,28 @@ function clearStaleLock(onLine: (line: string) => void): void {
     return // 没有锁文件 / 读不了 —— 不是要处理的情况
   }
   if (!Number.isInteger(holder) || holder <= 0) return
+
+  /*
+   * 时间判据放在最前面：锁太旧一律视为残留。
+   * dsh 自己的写锁超时就在分钟量级，超过这个时限的锁不可能是"正在进行的操作"。
+   * 这一条对跨机器、时钟不同步、PID 复用三种情况都成立。
+   */
+  const STALE_MS = 10 * 60 * 1000
+  let age = Number.POSITIVE_INFINITY
   try {
-    process.kill(holder, 0) // 只探测存在性，不真的发信号
-    return // 持有者还活着：确实有操作在跑
+    age = Date.now() - statSync(lock).mtimeMs
   } catch {
-    // 持有者已死 → 残留锁
+    /* 取不到时间就当它是旧的 */
   }
+  if (age <= STALE_MS && isHolderAlive(holder)) return // 又新、持有者又真在跑 → 不碰
+
   try {
     unlinkSync(lock)
-    onLine(`[启动器] 清掉残留的 profile 写锁（持有者 PID ${holder} 已不存在）`)
+    onLine(
+      `[启动器] 清掉残留的 profile 写锁（PID ${holder}，` +
+        (Number.isFinite(age) ? `已放置 ${Math.round(age / 60000)} 分钟` : '时间未知') +
+        '）'
+    )
   } catch {
     /* 删不掉就算了：dsh 自己会超时并给出错误 */
   }
