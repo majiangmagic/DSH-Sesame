@@ -20,7 +20,8 @@
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { lstat, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHome, profileDir } from './dshHome'
 import { dataRoot } from './paths'
@@ -89,33 +90,38 @@ function readManifest(dir: string): SnapshotEntry | null {
  * 遍历 1.4 万个文件大约 1~2 秒，比真打一次包（几十秒）便宜得多 ——
  * 所以先用它判断"这一份和上一份一样吗"，一样就完全跳过打包。
  */
-function fingerprintOf(dir: string): string {
+async function fingerprintOf(dir: string): Promise<string> {
+  /*
+   * **异步遍历**。原来用 readdirSync + lstatSync 递归 —— 1.4 万个文件要 1~2 秒，
+   * 全压在主进程上，界面就卡一下（用户反馈"点一个指令总是卡一下"）。
+   * 改用 fs.promises 后，主进程在 IO 等待期间可以继续处理事件。
+   */
   const h = createHash('sha256')
-  const walk = (cur: string, rel: string): void => {
+  const walk = async (cur: string, rel: string): Promise<void> => {
     let entries: string[]
     try {
-      entries = readdirSync(cur).sort()
+      entries = (await readdir(cur)).sort()
     } catch {
       return
     }
     for (const name of entries) {
       const full = join(cur, name)
       const r = rel === '' ? name : rel + '/' + name
-      let st: ReturnType<typeof lstatSync>
+      let st: Awaited<ReturnType<typeof lstat>>
       try {
-        st = lstatSync(full)
+        st = await lstat(full)
       } catch {
         continue
       }
       if (st.isDirectory()) {
         h.update('D' + r + '\n')
-        walk(full, r)
+        await walk(full, r)
       } else {
         h.update('F' + r + '|' + st.size + '|' + Math.round(st.mtimeMs) + '\n')
       }
     }
   }
-  walk(dir, '')
+  await walk(dir, '')
   return h.digest('hex')
 }
 
@@ -192,7 +198,7 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
    * "内容与上一份相同" → 回退前那份 pre-rollback **静默不生成**。
    * 而回退本身可逆正是靠那一份 —— 这种误判会让人以为有退路、实际没有。
    */
-  const modulesPrint = existsSync(modulesDir) ? fingerprintOf(modulesDir) : ''
+  const modulesPrint = existsSync(modulesDir) ? await fingerprintOf(modulesDir) : ''
   const configPrint = SNAPSHOT_FILES.map((name) => {
     const f = join(src, name)
     return existsSync(f) ? createHash('sha256').update(readFileSync(f)).digest('hex') : '-'
@@ -236,18 +242,18 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
     fingerprint
   }
   writeFileSync(join(dest, 'manifest.json'), JSON.stringify(entry, null, 2), 'utf8')
-  prune(profile)
+  await prune(profile)
   return entry
 }
 
 /** 超出保留数就删最旧的 */
-function prune(profile: string): void {
+async function prune(profile: string): Promise<void> {
   const dir = dirOf(profile)
   if (!existsSync(dir)) return
   const ids = readdirSync(dir).sort() // 时间戳命名 ⇒ 字典序即时间序
   const excess = ids.length - SNAPSHOT_KEEP
   for (let i = 0; i < excess; i++) {
-    rmSync(join(dir, ids[i]), { recursive: true, force: true })
+    await rm(join(dir, ids[i]), { recursive: true, force: true })
   }
 }
 
@@ -309,13 +315,13 @@ export async function restoreSnapshot(id: string): Promise<RestoreResult> {
  * id 里带路径分隔符的一律拒绝 —— 这是一条防目录穿越的底线：
  * 这个函数按 id 直接拼路径，若 id 来自界面且含 ../，就会删到快照目录外面。
  */
-export function deleteSnapshot(id: string): boolean {
+export async function deleteSnapshot(id: string): Promise<boolean> {
   if (id === '' || id.includes('/') || id.includes('\\') || id.includes('..')) {
     throw new Error('快照 id 非法：' + id)
   }
   const dir = join(dirOf(readSettings().profile), id)
   if (!existsSync(dir)) return false
-  rmSync(dir, { recursive: true, force: true })
+  await rm(dir, { recursive: true, force: true })
   return true
 }
 
@@ -334,7 +340,7 @@ export function deleteSnapshot(id: string): boolean {
  * **刻意不做分类**：打包是全量的，只需要把"有哪些插件"平铺列出来，
  * 再告诉用户 node_modules 有多大、上一次存是什么时候。
  */
-export function snapshotPreview(): SnapshotPreview {
+export async function snapshotPreview(): Promise<SnapshotPreview> {
   const profile = readSettings().profile
   const dir = profileDir(profile)
   const nm = join(dir, 'node_modules')
@@ -357,7 +363,7 @@ export function snapshotPreview(): SnapshotPreview {
     plugins,
     configFiles: SNAPSHOT_FILES.filter((f) => existsSync(join(dir, f))),
     modulesDir: nm,
-    modulesBytes: existsSync(nm) ? dirSize(nm) : 0,
+    modulesBytes: existsSync(nm) ? await dirSize(nm) : 0,
     willPack: existsSync(nm),
     lastAt: latest?.at ?? '',
     lastModulesBytes: latest?.modules?.bytes ?? 0
@@ -365,23 +371,24 @@ export function snapshotPreview(): SnapshotPreview {
 }
 
 /** 递归求目录大小（字节）—— 只在预演里用，1.4 万文件约 1 秒 */
-function dirSize(dir: string): number {
+async function dirSize(dir: string): Promise<number> {
+  // 同上：递归求和也走异步，别让主进程被上万次 stat 占住
   let total = 0
   let entries: string[]
   try {
-    entries = readdirSync(dir)
+    entries = await readdir(dir)
   } catch {
     return 0
   }
   for (const name of entries) {
     const full = join(dir, name)
-    let st: ReturnType<typeof lstatSync>
+    let st: Awaited<ReturnType<typeof lstat>>
     try {
-      st = lstatSync(full)
+      st = await lstat(full)
     } catch {
       continue
     }
-    if (st.isDirectory()) total += dirSize(full)
+    if (st.isDirectory()) total += await dirSize(full)
     else total += st.size
   }
   return total
