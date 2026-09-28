@@ -51,9 +51,9 @@ import {
  * **失败不阻断主流程**：存不上（磁盘满、权限）不该让"关闭插件"这个动作做不了，
  * 所以这里吞掉异常 —— 但会写一行日志，免得悄悄失效。
  */
-function autoSnapshotBefore(reason: string): void {
+async function autoSnapshotBefore(reason: string): Promise<void> {
   try {
-    createSnapshot('auto', reason)
+    await createSnapshot('auto', reason)
   } catch (cause) {
     pushTagged('启动器', '自动快照失败（不影响本次操作）：' + (cause instanceof Error ? cause.message : String(cause)))
   }
@@ -122,8 +122,8 @@ export function registerBusinessIpc(): void {
   // 也避免两次调用之间被别的东西改动而看到中间态。
   ipcMain.handle(
     PLUGIN_CHANNELS.setEnabled,
-    (_event: IpcMainInvokeEvent, packageName: string, enabled: boolean) => {
-      autoSnapshotBefore((enabled ? '开启' : '关闭') + '插件 ' + packageName)
+    async (_event: IpcMainInvokeEvent, packageName: string, enabled: boolean) => {
+      await autoSnapshotBefore((enabled ? '开启' : '关闭') + '插件 ' + packageName)
       if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
       if (typeof enabled !== 'boolean') throw new Error('缺少开关目标状态')
       const dir = profileDir()
@@ -145,7 +145,7 @@ export function registerBusinessIpc(): void {
   ipcMain.handle(PLUGIN_CHANNELS.install, async (event: IpcMainInvokeEvent, packageName: string) => {
     if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
     pushTagged('启动器', `安装插件 ${packageName}`)
-    autoSnapshotBefore('安装插件 ' + packageName)
+    await autoSnapshotBefore('安装插件 ' + packageName)
     await installPlugin(packageName, pluginProgress(event, packageName))
     pushTagged('启动器', `${packageName} 安装完成`)
   })
@@ -153,7 +153,7 @@ export function registerBusinessIpc(): void {
   ipcMain.handle(PLUGIN_CHANNELS.uninstall, async (event: IpcMainInvokeEvent, packageName: string) => {
     if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
     pushTagged('启动器', `卸载插件 ${packageName}`)
-    autoSnapshotBefore('卸载插件 ' + packageName)
+    await autoSnapshotBefore('卸载插件 ' + packageName)
     await uninstallPlugin(packageName, pluginProgress(event, packageName))
     pushTagged('启动器', `${packageName} 已卸载`)
   })
@@ -167,7 +167,7 @@ export function registerBusinessIpc(): void {
       if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
       if (typeof target !== 'string' || target === '') throw new Error('缺少目标版本')
       pushTagged('启动器', `更新插件 ${packageName} → ${target}`)
-      autoSnapshotBefore('升级插件 ' + packageName)
+      await autoSnapshotBefore('升级插件 ' + packageName)
       await updatePlugin(packageName, target, pluginProgress(event, packageName))
       pushTagged('启动器', `${packageName} 已更新到 ${target}`)
     }

@@ -18,7 +18,7 @@
  *   · 只写回文件。**回退前先自动存一份当前状态**（否则回退本身不可逆）。
  *   · 不自动跑 pnpm install —— node_modules 的同步是另一件事，界面上会说明。
  */
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -125,19 +125,38 @@ function fingerprintOf(dir: string): string {
  * 用**系统自带的 tar**（Win10+ 都有）：比 PowerShell 的 Compress-Archive 快很多，
  * 支持长路径，而且不用为此引一个新依赖进来。
  */
-function tarCreate(profileDirPath: string, outFile: string): void {
-  const r = spawnSync('tar', ['-czf', outFile, '-C', profileDirPath, 'node_modules'], { windowsHide: true })
-  if (r.status !== 0) {
-    throw new Error(`打包 node_modules 失败（tar 退出码 ${r.status}）：${String(r.stderr || '').slice(0, 200)}`)
-  }
+async function tarCreate(profileDirPath: string, outFile: string): Promise<void> {
+  /*
+   * **必须异步**。原来用 spawnSync —— 它会阻塞主进程直到 tar 退出：
+   * 打包 323 MB 的 node_modules 实测约 20 秒，这 20 秒里窗口不重绘、
+   * 按钮无响应（用户反馈"点一下总是卡一下"就是它）。
+   * 换成 spawn + Promise 后主进程只等事件，界面保持响应。
+   */
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('tar', ['-czf', outFile, '-C', profileDirPath, 'node_modules'], { windowsHide: true })
+    let err = ''
+    child.stderr?.on('data', (b: Buffer) => { err += String(b) })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`打包 node_modules 失败（tar 退出码 ${code}）：${err.slice(0, 200)}`))
+    })
+  })
 }
 
 /** 把 tgz 解回 profile 目录（同名覆盖） */
-function tarExtract(file: string, intoDir: string): void {
-  const r = spawnSync('tar', ['-xzf', file, '-C', intoDir], { windowsHide: true })
-  if (r.status !== 0) {
-    throw new Error(`解包失败（tar 退出码 ${r.status}）：${String(r.stderr || '').slice(0, 200)}`)
-  }
+async function tarExtract(file: string, intoDir: string): Promise<void> {
+  // 同上：解包也可能几十秒，绝不能阻塞主进程
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('tar', ['-xzf', file, '-C', intoDir], { windowsHide: true })
+    let err = ''
+    child.stderr?.on('data', (b: Buffer) => { err += String(b) })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      if (code === 0) resolve()
+      else reject(new Error(`解包失败（tar 退出码 ${code}）：${err.slice(0, 200)}`))
+    })
+  })
 }
 
 function sha256Of(file: string): string {
@@ -150,7 +169,7 @@ function sha256Of(file: string): string {
  * @param trigger 'manual' 用户点按钮；'auto' 插件变更前；'pre-rollback' 回退前自动存
  * @param label   备注（手动时可填）
  */
-export function createSnapshot(trigger: SnapshotTrigger, label = ''): SnapshotEntry {
+export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Promise<SnapshotEntry> {
   const settings = readSettings()
   const profile = settings.profile
   const src = profileDir(profile)
@@ -200,7 +219,7 @@ export function createSnapshot(trigger: SnapshotTrigger, label = ''): SnapshotEn
   let modules: SnapshotModules | null = null
   if (existsSync(modulesDir)) {
     const tgz = join(dest, 'modules.tgz')
-    tarCreate(src, tgz)
+    await tarCreate(src, tgz)
     modules = { file: 'modules.tgz', bytes: statSync(tgz).size, sha256: sha256Of(tgz) }
   }
 
@@ -252,14 +271,14 @@ export function listSnapshots(): SnapshotEntry[] {
  *
  * 只写回文件；`node_modules` 是否随之更新由界面提示，不在这一步自动跑 pnpm。
  */
-export function restoreSnapshot(id: string): RestoreResult {
+export async function restoreSnapshot(id: string): Promise<RestoreResult> {
   const profile = readSettings().profile
   const src = join(dirOf(profile), id)
   if (!existsSync(src)) throw new Error(`快照不存在：${id}`)
   const manifest = readManifest(src)
   if (!manifest) throw new Error(`快照缺少 manifest.json：${id}`)
 
-  const backup = createSnapshot('pre-rollback', `回退到 ${id} 之前`)
+  const backup = await createSnapshot('pre-rollback', `回退到 ${id} 之前`)
   const dest = profileDir(profile)
 
   const restored: string[] = []
@@ -276,7 +295,7 @@ export function restoreSnapshot(id: string): RestoreResult {
   if (manifest.modules) {
     const tgz = join(src, manifest.modules.file)
     if (existsSync(tgz)) {
-      tarExtract(tgz, dest)
+      await tarExtract(tgz, dest)
       modulesRestored = true
     }
   }
