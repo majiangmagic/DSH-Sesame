@@ -18,11 +18,17 @@ import { usePluginsStore } from '@/stores/plugins'
 const { t } = useI18n()
 const store = usePluginsStore()
 
-/** 副标题：有插件时「{profile} profile · 共 {total} 个 · {on} 个启用」，空列表只显示 profile */
+/**
+ * 副标题。
+ *
+ * 不再写单个 profile 名 —— 启动器现在**同时管两端**：插件开关会同时写
+ * `profiles/web` 与 `profiles/desktop`，启动桌面端前还会把 web 的插件与补丁层搬过去。
+ * 所以这句话描述的是「这套清单两端通用」，而不是「当前是哪个 profile」。
+ */
 const subtitle = computed(() => {
   const data = store.summary
   if (!data) return ''
-  if (!data.total) return `${data.profile} profile`
+  if (!data.total) return t('plugins.scope')
   return t('plugins.subtitle', data)
 })
 

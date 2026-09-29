@@ -1,9 +1,10 @@
-﻿import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/market'
+import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/market'
 import type { PluginList } from '@shared/plugins'
 import type { VersionOverview } from '@shared/versions'
 import type { DiagnosisResult } from '@shared/diagnose'
 import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
 import type {
+  DesktopLaunchProgress,
   InstallProgress,
   ManagerApi,
   PluginInstallProgress,
@@ -152,8 +153,26 @@ export const realApi: ManagerApi = {
 
   /* ---------------- 启动 / 停止（spawn dsh web） ---------------- */
 
-  /** 等到 dsh 打印就绪地址才返回；失败的消息里带子进程输出尾巴 */
-  startVersion: (version: string): Promise<RunningState> => window.sesame.versions.start(version),
+  /**
+   * 启动一个版本。桌面端时订阅「下载 → 安装 → 启动」的进度并透传给 onProgress；
+   * 其余启动方式进度通道不发消息，onProgress 自然不会被调用。
+   */
+  async startVersion(
+    version: string,
+    onProgress?: (progress: DesktopLaunchProgress) => void
+  ): Promise<RunningState> {
+    const off = onProgress
+      ? window.sesame.desktop.onProgress((event) => {
+          if (event.version !== version) return
+          onProgress({ phase: event.phase, text: event.text })
+        })
+      : null
+    try {
+      return await window.sesame.versions.start(version)
+    } finally {
+      off?.()
+    }
+  },
 
   stopVersion: (): Promise<void> => window.sesame.versions.stop()
 }

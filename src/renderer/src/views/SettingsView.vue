@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SampleTag from '@/components/SampleTag.vue'
@@ -34,19 +34,18 @@ const draft = ref<SettingsPayload | null>(null)
 const savedHint = ref('')
 
 /**
- * 可选的启动 profile。
+ * 可选的「启动方式」。
  *
- * **`tui` 已放开为可选**（按需求），但选了它启动会**明确失败** ——
- * tui 是终端界面，需要一个真正的终端窗口（TTY），启动器这个窗口里没有终端。
- * 主进程在 spawn 之前就会拦下并给出该敲的命令（见 `src/main/runner.ts` 的守卫），
- * 而不是让它干等 180 秒超时。
- *
- * acp / sdk / headless 同理不能放进启动器，所以这里仍然只列 web 与 tui。
+ * - `web` / `tui` 是 dsh 的 profile，直接 spawn `node bin.js <profile>`；
+ * - `desktop` 不是 dsh 的 profile，而是官方桌面端（另一个 Electron 应用），
+ *   由主进程「下载对应版本安装包 → 静默安装 → 启动」；
+ * - `headless` 等不能在启动器窗口里跑，保持禁用。
  */
-const PROFILES: Array<{ value: string; available: boolean }> = [
-  { value: 'web', available: true },
-  { value: 'tui', available: true },
-  { value: 'headless', available: false }
+const PROFILES: Array<{ value: string; available: boolean; label: string }> = [
+  { value: 'web', available: true, label: 'web' },
+  { value: 'tui', available: true, label: 'tui' },
+  { value: 'desktop', available: true, label: t('settings.modeDesktop') },
+  { value: 'headless', available: false, label: 'headless' }
 ]
 
 /** 语言下拉的取值与原版一致（'zh' / 'en'），到 locale 名要过一次映射 */
@@ -107,7 +106,7 @@ onMounted(async () => {
         <span>{{ t('settings.profile') }}</span>
         <select id="profile" v-model="draft.profile">
           <option v-for="item in PROFILES" :key="item.value" :value="item.value" :disabled="!item.available">
-            {{ item.value }}
+            {{ item.label }}
           </option>
         </select>
       </label>

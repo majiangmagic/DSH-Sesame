@@ -1,4 +1,4 @@
-﻿import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate } from '@shared/market'
+import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate } from '@shared/market'
 import type { PluginEntry, PluginList, PluginReason } from '@shared/plugins'
 import type { VersionOverview, VersionStatus } from '@shared/versions'
 import type { DiagnosisResult } from '@shared/diagnose'
@@ -44,9 +44,12 @@ export interface SettingsPayload {
   lang: 'zh' | 'en'
   /** 额外启动参数，原样字符串 */
   args: string
-  /** 启动 profile：只有 web 能在启动器窗口里跑起来 */
+  /** 启动方式：`web` / `tui` 是 dsh 的 profile；`desktop` 是另一个 Electron 应用 */
   profile: string
-  /** 启动端口（1024~65535）。固定端口，默认 3080；被占用时自动回退到系统分配的空闲端口 */
+  /**
+   * **dsh 的端口**（web / tui 用）。**桌面端不受它影响** ——
+   * 桌面端用自己内置的 `webserver.config.port`（默认 19387）。
+   */
   port: number
   /** dsh 数据目录（DSH_HOME）。空串 = 用 DSH_HOME 环境变量或默认的 ~/.dsh */
   dshHome: string,
@@ -74,6 +77,12 @@ export interface InstallProgress {
  */
 export interface PluginInstallProgress {
   phase: 'resolve' | 'install' | 'done'
+  text: string
+}
+
+/** 桌面端「下载 → 安装 → 启动」的进度（对应 shared 里的 DesktopProgressEvent，去掉 version 字段） */
+export interface DesktopLaunchProgress {
+  phase: 'download' | 'install' | 'launch'
   text: string
 }
 
@@ -175,10 +184,18 @@ export interface ManagerApi {
   /* ---------------- 启动 / 停止 ---------------- */
 
   /**
-   * 启动一个版本：主进程 spawn `dsh web --host 127.0.0.1 --port <设置里的端口> --no-open`，
+   * 启动一个版本。
+   *
+   * 启动方式为 `web` / `tui` 时：主进程 spawn `dsh web --host 127.0.0.1 --port <设置里的端口> --no-open`，
    * **等到 dsh 打印就绪地址才 resolve**。失败时消息里带子进程输出尾巴。
+   *
+   * 启动方式为 `desktop` 时：下载对应版本的官方桌面端安装包 → 静默安装 → 启动，
+   * 进度通过 onProgress 回报（首次较慢）。返回的 url 为 null，界面据此不开浏览器。
    */
-  startVersion(version: string): Promise<RunningState>
+  startVersion(
+    version: string,
+    onProgress?: (progress: DesktopLaunchProgress) => void
+  ): Promise<RunningState>
 
   /** 停止当前运行的版本（杀整棵进程树）。没在跑时直接返回。 */
   stopVersion(): Promise<void>

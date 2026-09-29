@@ -1,4 +1,4 @@
-﻿import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 
@@ -13,8 +13,9 @@ import { app } from 'electron'
  *   autoStart  开机自启 —— `app.setLoginItemSettings`（只在打包后生效，见下）
  *   lang       界面语言 —— 渲染层用，主进程只是存
  *   args       额外启动参数 —— 追加到 `dsh <profile> …` 末尾
- *   profile    启动 profile —— 目前只有 `web` 能真正跑起来，见 runner 的守卫
- *   port       启动端口 —— 固定端口，默认 DEFAULT_PORT（原来是 `--port 0` 让系统随便挑）
+ *   profile    启动方式 —— `web` / `tui` 是 dsh 的 profile；`desktop` 是另一个 Electron 应用
+ *   port       **dsh 的端口**（web / tui 用）—— 桌面端**不受它影响**：它由自己内置的
+ *              `webserver.config.port` 决定（默认 19387），启动器不传也不该传这个值
  *   dshHome    dsh 的数据目录（DSH_HOME）—— 空表示"用环境变量或默认 ~/.dsh"
  */
 /**

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * DSH-Sesame 新增界面。
  *
  * ⚠️ 这个文件里的**全部规则都是新增的**，是为"控制页加插件开关 + 版本管理"
@@ -31,6 +31,25 @@
   width: min(720px, 100%);
   margin: 0 auto;
   flex: 0 0 auto;
+}
+
+/*
+ * 版本卡片的下拉浮层要能盖住**下面那张插件卡片**。
+ *
+ * 为什么必须给卡片本身分层，而不是给浮层加 z-index：
+ * `.panel` 带 `backdrop-filter`，每张卡片因此各自成为一个**层叠上下文** ——
+ * 浮层（`.picker-panel`）的 z-index 再高，也只能在自己那张卡片内部排序，
+ * 永远压不过 DOM 里排在后面的插件卡片。给两张卡片分出高低，
+ * 整张版本卡片（连同它的浮层）才会浮上去。
+ */
+#view-control.home-stack > .panel.home {
+  position: relative;
+  z-index: 2;
+}
+
+#view-control.home-stack > #homePlugins {
+  position: relative;
+  z-index: 1;
 }
 
 /* 卡片内的列表不再受 .panel.module-panel 的 max-height 约束（首页用的是普通 .panel） */

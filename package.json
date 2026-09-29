@@ -1,6 +1,6 @@
 {
   "name": "dsh-sesame",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "description": "DSH-Sesame —— dsh 的桌面启动器（Electron + Vue 3 + TypeScript）",
   "author": "DSH-Sesame",
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
+    "@types/semver": "^7.8.0",
     "@vitejs/plugin-vue": "^6.0.9",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
@@ -37,6 +38,7 @@
   "dependencies": {
     "dshmarket": "1.58.0",
     "pinia": "^4.0.3",
+    "semver": "^7.8.5",
     "vue": "^3.5.43",
     "vue-i18n": "^11.4.12",
     "vue-router": "^5.3.1"

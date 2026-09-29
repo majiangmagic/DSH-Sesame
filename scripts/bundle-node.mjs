@@ -11,7 +11,7 @@
  * 产物目录 node-bundle/ 在 .gitignore 里 —— 88 MB 的二进制不该进 git 历史。
  */
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -53,3 +53,55 @@ console.log(`  已内置 Node ${version}`)
 console.log(`  来源  ${src}`)
 console.log(`  落点  ${dest}`)
 console.log(`  大小  ${size.toFixed(1)} MB`)
+
+/*
+ * 顺带把 7za.exe 放进同一个目录（运行时的 <应用目录>/node/7za.exe）。
+ *
+ * 为什么需要它：官方桌面端只发 **NSIS 安装包**，而那个安装器是**全局单实例**的 ——
+ * 装第二个版本会先「卸载旧版本文件」，多版本无法并存，重复启动还会去重装（实测报
+ * "Failed to uninstall old application files"）。所以启动器改成用 7za 把 NSIS 包
+ * **解压成绿色版**（7za 能识别内嵌的 7z），于是每个版本一个独立目录、天然可复用。
+ *
+ * 7za 必须随包带：不能指望用户机器上装了 7-Zip。
+ */
+const sevenZip = findSevenZip()
+if (sevenZip !== null) {
+  const dest7za = join(destDir, isWin ? '7za.exe' : '7za')
+  copyFileSync(sevenZip, dest7za)
+  console.log(`  已内置 7za  ${(statSync(dest7za).size / 1024 / 1024).toFixed(1)} MB`)
+  console.log(`  来源  ${sevenZip}`)
+} else {
+  console.warn('  警告：没找到 7za.exe —— 用户机器上「解压桌面端」会失败。')
+}
+
+/** 找 7za：优先 node_modules/7zip-bin，否则 electron-builder 的缓存目录。 */
+function findSevenZip() {
+  if (!isWin) return null
+
+  const found = []
+  const fromBin = join(ROOT, 'node_modules', '7zip-bin')
+  for (const rel of [join('win', 'x64', '7za.exe'), join('win', 'ia32', '7za.exe')]) {
+    const candidate = join(fromBin, rel)
+    if (existsSync(candidate)) found.push(candidate)
+  }
+
+  const cache = process.env.LOCALAPPDATA
+    ? join(process.env.LOCALAPPDATA, 'electron-builder', 'Cache')
+    : ''
+  if (cache !== '' && existsSync(cache)) {
+    try {
+      for (const entry of readdirSync(cache)) {
+        if (!entry.startsWith('7zip')) continue
+        const base = join(cache, entry)
+        for (const inner of readdirSync(base)) {
+          const candidate = join(base, inner, 'bin', '7za.exe')
+          if (existsSync(candidate)) found.push(candidate)
+        }
+      }
+    } catch {
+      // 缓存目录读不动就跳过，下面会给出警告
+    }
+  }
+
+  return found[0] ?? null
+}

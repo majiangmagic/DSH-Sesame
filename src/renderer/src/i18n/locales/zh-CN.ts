@@ -39,6 +39,7 @@ export default {
     cancel: "取消",
     builtin: '随 dsh 提供',
     disabled: '已停用：{names}',
+    skipped: '以下插件未能加载（被 dsh 跳过）：',
   },
   app: {
     title: 'DSH-S'
@@ -110,7 +111,9 @@ export default {
     refresh: '刷新',
     disabled: '已禁用',
     rows: '行 {ids}',
-    subtitle: '{profile} profile · 共 {total} 个 · {on} 个启用',
+    subtitle: 'web 与桌面端通用 · 共 {total} 个 · {on} 个启用',
+    /** 列表为空时只显示这句（不再显示单个 profile 名） */
+    scope: 'web 与桌面端通用',
     willEnable: '启用 {name}（从 cordis.patch.yml 删掉它的禁用行）',
     willDisable: '停用 {name}（在 cordis.patch.yml 里为它的行写上 disabled: true）',
     /**
@@ -183,7 +186,8 @@ export default {
     stopped: '未运行',
     starting: '启动中',
     stopping: '停止中',
-    installing: '安装中'
+    installing: '安装中',
+    desktop: '桌面端'
   },
 
   log: {
@@ -195,8 +199,9 @@ export default {
     seedMarket: '插件市场',
     autoDisable: '兼容模式',
     advanced: '高级设置',
-    profile: '启动 profile',
-    port: '启动端口',
+    profile: '启动方式',
+    modeDesktop: '桌面端',
+    port: 'web 端端口',
     poolDir: '版本位置',
     poolDirPlaceholder: '默认<软件目录>/dsh',
     snapshotDir: "快照目录",

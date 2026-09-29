@@ -1,7 +1,8 @@
-﻿import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import type { DiagnosisResult } from '@shared/diagnose'
 import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
 import {
+  DESKTOP_CHANNELS,
   LOG_CHANNELS,
   MARKET_CHANNELS,
   PLUGIN_CHANNELS,
@@ -10,6 +11,7 @@ import {
   DIAGNOSE_CHANNELS,
   SNAPSHOT_CHANNELS,
   WINDOW_CHANNELS,
+  type DesktopProgressEvent,
   type LauncherSettingsPayload,
   type PluginProgressEvent,
   type VersionProgressEvent
@@ -72,6 +74,17 @@ const api = {
       ipcRenderer.on(VERSION_CHANNELS.progress, handler)
       return () => {
         ipcRenderer.off(VERSION_CHANNELS.progress, handler)
+      }
+    }
+  },
+
+  desktop: {
+    /** 订阅桌面端「下载 → 安装 → 启动」的进度，返回取消订阅函数 */
+    onProgress: (listener: (event: DesktopProgressEvent) => void): (() => void) => {
+      const handler = (_event: unknown, payload: DesktopProgressEvent): void => listener(payload)
+      ipcRenderer.on(DESKTOP_CHANNELS.progress, handler)
+      return () => {
+        ipcRenderer.off(DESKTOP_CHANNELS.progress, handler)
       }
     }
   },

@@ -1,12 +1,16 @@
-﻿import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   DIAGNOSE_CHANNELS,
+  DESKTOP_CHANNELS,
   LOG_CHANNELS,
   SNAPSHOT_CHANNELS,
   MARKET_CHANNELS,
   PLUGIN_CHANNELS,
   SETTINGS_CHANNELS,
   VERSION_CHANNELS,
+  type DesktopProgressEvent,
   type LauncherSettingsPayload,
   type PluginProgressEvent,
   type VersionProgressEvent
@@ -20,7 +24,7 @@ import { assessProfile, checkMarketUpdate, loadCatalog, loadMarket, listSnapshot
 import { overview } from './versions'
 import { clearLog, logSnapshot, pushTagged } from './logbus'
 import { readSettings, writeSettings } from './settings'
-import { diagnose } from './diagnose'
+import { diagnose, diagnoseDesktop } from './diagnose'
 /*
  * 注意别名：本文件第 17 行已经从 ./market 引入了同名的 listSnapshots（那是市场的快照列表，
  * 和插件配置快照是两回事）。不加别名会 TS2300 重名报错。
@@ -66,8 +70,15 @@ export function registerBusinessIpc(): void {
    * 端口用设置里的那个（复现真实情况）。**它会真的起 dsh**，用完即停 ——
    * 要抓"搞坏启动"的插件，harness 连插件一起启动是唯一办法。
    */
+  /*
+   * 桌面端模式下**不能**走 "spawn dsh" 那条路 —— CLI 明确拒绝 desktop profile
+   * （`managed exclusively by the Electron application`），硬跑只会得到一句
+   * 假的"启动失败"。改成用桌面端自带 CLI 做只读诊断（解析它跳过哪些 bundle）。
+   */
   ipcMain.handle(DIAGNOSE_CHANNELS.run, (_event: IpcMainInvokeEvent, version: string) =>
-    diagnose(version, readSettings().port)
+    readSettings().profile === 'desktop'
+      ? diagnoseDesktop(version)
+      : diagnose(version, readSettings().port)
   )
 
   /* 插件配置快照：手动/自动存、列、回退（回退前自动先存一份当前状态） */
@@ -102,11 +113,15 @@ export function registerBusinessIpc(): void {
 
   // 启动要等到 dsh 打印就绪地址才返回 —— 界面因此不会出现"点了没反应"的中间态。
   // 首次启动可能要现场装依赖，会比较慢，这是 dsh 侧的真实耗时，不做假的进度条。
-  ipcMain.handle(VERSION_CHANNELS.start, async (_event: IpcMainInvokeEvent, version: string) => {
+  // 桌面端走的是「下载 → 安装 → 启动」，进度单独通过 DESKTOP_CHANNELS.progress 推回发起窗口。
+  ipcMain.handle(VERSION_CHANNELS.start, async (event: IpcMainInvokeEvent, version: string) => {
     if (typeof version !== 'string' || version === '') throw new Error('缺少版本号')
     pushTagged('启动器', `启动 ${version}`)
-    const state = await startVersion(version)
-    pushTagged('启动器', `${version} 就绪：${state.url ?? '(无地址)'}`)
+    const state = await startVersion(version, (progress) => {
+      const payload: DesktopProgressEvent = { version, ...progress }
+      if (!event.sender.isDestroyed()) event.sender.send(DESKTOP_CHANNELS.progress, payload)
+    })
+    pushTagged('启动器', state.url ? `${version} 就绪：${state.url}` : `${version} 已启动`)
     return state
   })
 
@@ -128,6 +143,25 @@ export function registerBusinessIpc(): void {
       if (typeof enabled !== 'boolean') throw new Error('缺少开关目标状态')
       const dir = profileDir()
       setPluginEnabled(dir, packageName, enabled)
+
+      /*
+       * 同时写桌面端 profile。
+       *
+       * 桌面端是**独立的一套 profile**（官方设计：独占 `profiles/desktop`），不写它就不会跟着关。
+       * 这里刻意**尽力而为**：桌面端没装这个插件时是空操作；失败也只记一行日志 ——
+       * 绝不能因为桌面端的问题让 web 的开关做不了。
+       */
+      try {
+        const desktopDir = profileDir('desktop')
+        const installedThere = existsSync(join(desktopDir, 'node_modules', packageName, 'package.json'))
+        if (installedThere) setPluginEnabled(desktopDir, packageName, enabled)
+      } catch (cause) {
+        pushTagged(
+          '桌面端',
+          '同步插件开关失败（不影响 web）：' + (cause instanceof Error ? cause.message : String(cause))
+        )
+      }
+
       return listPlugins(dir)
     }
   )

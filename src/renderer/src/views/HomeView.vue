@@ -119,6 +119,8 @@ const showRunningLink = computed(
 
 const hintText = computed(() => {
   if (versions.error) return versions.error
+  // 桌面端启动时主进程会推「下载 / 安装」的进度，优先显示它
+  if (versions.progressText) return versions.progressText
   switch (versions.action) {
     case 'starting':
       return t('progress.starting')
@@ -195,10 +197,15 @@ onMounted(async () => {
       </div>
       <p class="status-line" id="status-line">
         <template v-if="showRunningLink">
-          {{ t('status.running') }} ·
-          <a :href="versions.running?.url ?? ''" target="_blank" rel="noreferrer">
-            {{ versions.running?.url }}
-          </a>
+          {{ t('status.running') }}
+          <!-- web/tui 有就绪地址；桌面端（url=null）没有地址，只标明是什么在跑 -->
+          <template v-if="versions.running?.url">
+            ·
+            <a :href="versions.running.url" target="_blank" rel="noreferrer">
+              {{ versions.running.url }}
+            </a>
+          </template>
+          <template v-else> · {{ t('status.desktop') }}</template>
         </template>
         <template v-else>{{ hintText }}</template>
       </p>
@@ -226,7 +233,20 @@ onMounted(async () => {
     <div class="confirm-card" role="alertdialog" aria-modal="true" aria-labelledby="diagTitle">
       <h2 class="confirm-title" id="diagTitle">{{ t('check.title') }}</h2>
 
-      <template v-if="diagnosis.outcome === 'ready'">
+      <!--
+        被跳过的 bundle **优先展示**：桌面端模式下这就是唯一的诊断信息（dsh 的 CLI 不接
+        desktop profile，拿不到 `Failed plugins` 段）；web 模式下它是"启动成功但有插件没加载"的原因。
+      -->
+      <template v-if="diagnosis.skipped.length > 0">
+        <p class="banner-text">{{ t('check.skipped') }}</p>
+        <ul class="banner-text" id="diagSkippedList">
+          <li v-for="item in diagnosis.skipped" :key="item.name">
+            {{ item.name }} —— {{ item.reason }}
+          </li>
+        </ul>
+      </template>
+
+      <template v-else-if="diagnosis.outcome === 'ready'">
         <p class="banner-text">{{ t('check.ok') }}</p>
       </template>
 

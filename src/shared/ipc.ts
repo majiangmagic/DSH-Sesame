@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 主进程 ↔ 渲染层共用的通道名。
  *
  * 分两组：
@@ -89,9 +89,14 @@ export interface LauncherSettingsPayload {
   lang: 'zh' | 'en'
   /** 额外启动参数，原样字符串（主进程负责拆分成 argv） */
   args: string
-  /** 启动 profile。只有 `web` 能在启动器窗口里跑起来，其他会在启动时被明确拒绝 */
+  /** 启动方式。`web` / `tui` 是 dsh 的 profile；`desktop` 是另一个 Electron 应用（不 spawn dsh） */
   profile: string
-  /** 启动端口（1024~65535）。固定端口，默认 3080；被占用时自动回退到系统分配的空闲端口 */
+  /**
+   * **dsh 的端口**（web / tui 用；1024~65535，默认 3080，被占用时回退到系统分配的空闲端口）。
+   *
+   * **桌面端不受它影响** —— 桌面端由自己内置的 `webserver.config.port` 决定（默认 19387），
+   * 启动器既不传、也不该传这个值。
+   */
   port: number
   /** dsh 数据目录（DSH_HOME）。空串 = 用环境变量或默认的 ~/.dsh */
   dshHome: string,
@@ -103,6 +108,24 @@ export interface LauncherSettingsPayload {
 export interface VersionProgressEvent {
   version: string
   phase: 'resolve' | 'download' | 'done'
+  text: string
+}
+
+/**
+ * 桌面端启动方式专用的通道。
+ *
+ * desktop 是另一个 Electron 应用（不是 dsh 的 profile），它的「启动」是
+ * 下载官方安装包 → 静默安装 → 拉起可执行文件，所以进度和版本安装分开走一条通道。
+ */
+export const DESKTOP_CHANNELS = {
+  /** 主进程 → 渲染层的桌面端下载/安装/启动进度 */
+  progress: 'desktop:progress'
+} as const
+
+/** 桌面端启动进度推送的载荷 */
+export interface DesktopProgressEvent {
+  version: string
+  phase: 'download' | 'install' | 'launch'
   text: string
 }
 

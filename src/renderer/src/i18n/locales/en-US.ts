@@ -41,6 +41,7 @@ const enUS: typeof zhCN = {
   cancel: "Cancel",
   builtin: 'bundled with dsh',
   disabled: 'Disabled: {names}',
+  skipped: 'These plugins did not load (skipped by dsh):',
   },
   app: {
     title: 'DSH-S'
@@ -112,7 +113,9 @@ const enUS: typeof zhCN = {
     refresh: 'Refresh',
     disabled: 'Disabled',
     rows: 'rows {ids}',
-    subtitle: '{profile} profile · {total} total · {on} enabled',
+    subtitle: 'Shared by web & desktop · {total} total · {on} enabled',
+    /** Shown when the list is empty (no single profile name any more) */
+    scope: 'Shared by web & desktop',
     willEnable: 'Enable {name} (removes its disabled row from cordis.patch.yml)',
     willDisable: 'Disable {name} (writes disabled: true for its row in cordis.patch.yml)',
     /**
@@ -183,7 +186,8 @@ const enUS: typeof zhCN = {
     stopped: 'Stopped',
     starting: 'Starting',
     stopping: 'Stopping',
-    installing: 'Installing'
+    installing: 'Installing',
+    desktop: 'Desktop'
   },
 
   log: {
@@ -195,8 +199,9 @@ const enUS: typeof zhCN = {
     seedMarket: 'Plugin marketplace',
     autoDisable: 'Compatibility mode',
     advanced: 'Advanced',
-    profile: 'Start profile',
-    port: 'Startup port',
+    profile: 'Start mode',
+    modeDesktop: 'Desktop',
+    port: 'Web port',
     poolDir: 'Version location',
     poolDirPlaceholder: 'default <app directory>/dsh',
     snapshotDir: 'Snapshot folder',

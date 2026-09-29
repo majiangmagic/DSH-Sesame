@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 插件配置快照 —— 手动 / 自动存，最多 10 份，可回退。
  *
  * 快照的**文件清单照 dsh-plugin-guard**（它实测过这套够用）：
@@ -48,6 +48,16 @@ export const SNAPSHOT_FILES = [
 
 /** 每个 profile 最多保留多少份 */
 export const SNAPSHOT_KEEP = 10
+
+/**
+ * 快照锚定的 profile —— **永远是 `web`**，不随「启动方式」变。
+ *
+ * 快照是「web profile 的配置 + 依赖存档」，这条基线是固定的。而设置里的 `profile`
+ * 现在还能取 `desktop`（启动方式），它不是 dsh 的 profile —— 没有可快照的东西，
+ * 目录也是空的。之前这里跟着 `readSettings().profile` 走，一旦把启动方式切成 desktop，
+ * 快照就会跑到 `snapshots/desktop/` 并对空目录存档（用户实测发现）。
+ */
+const SNAPSHOT_PROFILE = 'web'
 
 
 /**
@@ -176,8 +186,7 @@ function sha256Of(file: string): string {
  * @param label   备注（手动时可填）
  */
 export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Promise<SnapshotEntry> {
-  const settings = readSettings()
-  const profile = settings.profile
+  const profile = SNAPSHOT_PROFILE
   const src = profileDir(profile)
   if (!existsSync(src)) throw new Error(`profile 目录不存在：${src}`)
 
@@ -259,7 +268,7 @@ async function prune(profile: string): Promise<void> {
 
 /** 列出快照，新的在前 */
 export function listSnapshots(): SnapshotEntry[] {
-  const dir = dirOf(readSettings().profile)
+  const dir = dirOf(SNAPSHOT_PROFILE)
   if (!existsSync(dir)) return []
   const out: SnapshotEntry[] = []
   for (const id of readdirSync(dir)) {
@@ -278,7 +287,7 @@ export function listSnapshots(): SnapshotEntry[] {
  * 只写回文件；`node_modules` 是否随之更新由界面提示，不在这一步自动跑 pnpm。
  */
 export async function restoreSnapshot(id: string): Promise<RestoreResult> {
-  const profile = readSettings().profile
+  const profile = SNAPSHOT_PROFILE
   const src = join(dirOf(profile), id)
   if (!existsSync(src)) throw new Error(`快照不存在：${id}`)
   const manifest = readManifest(src)
@@ -319,7 +328,7 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
   if (id === '' || id.includes('/') || id.includes('\\') || id.includes('..')) {
     throw new Error('快照 id 非法：' + id)
   }
-  const dir = join(dirOf(readSettings().profile), id)
+  const dir = join(dirOf(SNAPSHOT_PROFILE), id)
   if (!existsSync(dir)) return false
   await rm(dir, { recursive: true, force: true })
   return true
@@ -341,7 +350,7 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
  * 再告诉用户 node_modules 有多大、上一次存是什么时候。
  */
 export async function snapshotPreview(): Promise<SnapshotPreview> {
-  const profile = readSettings().profile
+  const profile = SNAPSHOT_PROFILE
   const dir = profileDir(profile)
   const nm = join(dir, 'node_modules')
 
@@ -409,5 +418,5 @@ function readInstalledVersion(pkgDir: string): string {
  * 调用方（IPC）不设超时，这里只做说明用。
  */
 export function snapshotPaths(): SnapshotPaths {
-  return { profileDir: profileDir(readSettings().profile), root: snapshotRoot(), home: dshHome() }
+  return { profileDir: profileDir(SNAPSHOT_PROFILE), root: snapshotRoot(), home: dshHome() }
 }

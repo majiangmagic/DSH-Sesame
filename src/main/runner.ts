@@ -8,6 +8,8 @@ import { createServer } from 'node:net'
 import { requireNode } from './runtime'
 import { pushTagged } from './logbus'
 import { readSettings, splitArgs } from './settings'
+import { desktopLogPath, ensureDesktop, launchDesktop, type DesktopProgress } from './desktop'
+import { syncWebToDesktop } from './sync'
 
 /**
  * dsh 进程的运行器 —— 「启动 / 停止」的真实实现。
@@ -64,8 +66,19 @@ interface Proc extends RunState {
 
 let current: Proc | null = null
 
+/**
+ * 正在运行的桌面端。
+ *
+ * 桌面端是另一个应用（不是 dsh 子进程），所以单独记一份；它与 dsh 实例**互斥** ——
+ * 同一时刻只该有一个在跑。记着它，`overview()` 才能把那个版本标成「运行中」，
+ * 界面上的「停止」也才能真的掐断。
+ */
+let desktopProc: { version: string; child: ChildProcess } | null = null
+
 /** 当前运行态；没有在跑返回 null。`overview()` 用它给已装版本打上 status/url。 */
 export function currentRun(): RunState | null {
+  // 桌面端优先：它没有就绪地址，url 恒为 null，界面据此不开浏览器
+  if (desktopProc !== null) return { version: desktopProc.version, status: 'running', url: null }
   if (current === null) return null
   return { version: current.version, status: current.status, url: current.url }
 }
@@ -245,8 +258,18 @@ function waitUntilReady(proc: Proc): Promise<RunState> {
   })
 }
 
-/** 停止当前进程；没在跑就直接返回。 */
+/** 停掉正在跑的桌面端；没在跑就什么都不做。 */
+export async function stopDesktop(): Promise<void> {
+  const proc = desktopProc
+  if (proc === null) return
+  desktopProc = null
+  killTree(proc.child.pid)
+}
+
+/** 停止当前进程（dsh 或桌面端）；没在跑就直接返回。 */
 export async function stopVersion(): Promise<void> {
+  await stopDesktop()
+
   const proc = current
   if (proc === null) return
   proc.status = 'stopping'
@@ -270,8 +293,63 @@ export async function stopVersion(): Promise<void> {
  * 已经在跑同一个且就绪 → 直接返回现有地址；正在启动 → 等它就绪；
  * 跑着别的版本 → 先停再启（一个 dsh 实例共用同一份 profile，不能并存）。
  */
-export async function startVersion(version: string): Promise<RunState> {
+export async function startVersion(
+  version: string,
+  onDesktopProgress?: (progress: DesktopProgress) => void
+): Promise<RunState> {
   if (!/^[0-9A-Za-z][0-9A-Za-z._+-]*$/.test(version)) throw new Error(`版本号不合法：${version}`)
+
+  const profile = readSettings().profile
+
+  /*
+   * 桌面端不是 dsh 的 profile，而是另一个 Electron 应用：这里不 spawn dsh，改成
+   * 「按需下载 + 解压官方安装包 → 启动它」，并把进程记进 desktopProc ——
+   * 于是它和 web 一样：界面标「运行中」、点「停止」能掐断。
+   * 返回 url=null，界面据此知道不该去开浏览器。
+   */
+  if (profile === 'desktop') {
+    // 同一个版本已经在跑 → 直接返回，不重复启动
+    if (desktopProc !== null && desktopProc.version === version) {
+      return { version, status: 'running', url: null }
+    }
+    // 桌面端与 dsh 实例互斥：先停掉在跑的（dsh，或另一个版本的桌面端）
+    if (current !== null || desktopProc !== null) await stopVersion()
+
+    const exe = await ensureDesktop(version, onDesktopProgress)
+
+    /*
+     * web 是唯一基准：启动前把 web 的插件与模型提供商补进桌面端 profile。
+     *
+     * 必须在**启动之前**做 —— 桌面端跑起来就持有 profile 写锁，那时再动它会失败。
+     * 同步失败**不阻断启动**：桌面端本身是好的，只是插件没跟上。
+     */
+    try {
+      onDesktopProgress?.({ phase: 'install', text: '正在同步 web 的插件与模型提供商…' })
+      const report = await syncWebToDesktop(
+        (p) => onDesktopProgress?.({ phase: 'install', text: p.text }),
+        version
+      )
+      const summary: string[] = []
+      if (report.installed.length > 0) summary.push(`新装 ${report.installed.length} 个插件`)
+      if (report.patched.length > 0) summary.push(`补丁条目 ${report.patched.length} 条`)
+      if (report.exempted.length > 0) summary.push(`版本声明落后已开闸 ${report.exempted.length} 个`)
+      if (summary.length > 0) pushTagged('桌面端', `同步完成：${summary.join(' · ')}`)
+      if (report.failed.length > 0) {
+        pushTagged('桌面端', `这些插件没搬过去：${report.failed.join('、')}（可在插件页单独处理）`)
+      }
+    } catch (cause) {
+      pushTagged('桌面端', '同步失败（不影响启动）：' + (cause instanceof Error ? cause.message : String(cause)))
+    }
+
+    onDesktopProgress?.({ phase: 'launch', text: '正在启动桌面端…' })
+    const child = launchDesktop(exe, desktopLogPath(version))
+    desktopProc = { version, child }
+    // 用户自己关掉桌面端时要清掉状态，否则界面会一直显示「运行中」
+    child.on('exit', () => {
+      if (desktopProc !== null && desktopProc.child === child) desktopProc = null
+    })
+    return { version, status: 'running', url: null }
+  }
 
   /**
    * 非 web 的 profile **在启动器窗口里跑不起来**，所以在这里就明确拒绝。
@@ -283,7 +361,6 @@ export async function startVersion(version: string): Promise<RunState> {
    *   headless  回答一个问题就退出的一次性任务
    * 与其让它挂三分钟，不如立刻说清楚，并把该敲的命令原样给出来。
    */
-  const profile = readSettings().profile
   if (profile !== 'web') {
     const reason =
       profile === 'tui'
@@ -292,7 +369,7 @@ export async function startVersion(version: string): Promise<RunState> {
     throw new Error(
       `${reason}\n\n` +
         `想在终端里用它，执行：\n  node "${versionBin(version)}" ${profile}\n\n` +
-        '或者到「设置」页把「启动 profile」改回 web。'
+        '或者到「设置」页把「启动方式」改回 web。'
     )
   }
 
@@ -331,10 +408,16 @@ export async function startVersion(version: string): Promise<RunState> {
   return waitUntilReady(attach(version, child))
 }
 
-/** 退出应用时收尾：杀掉还在跑的 dsh，别留孤儿进程。 */
+/** 退出应用时收尾：杀掉还在跑的 dsh / 桌面端，别留孤儿进程（会一直占着内存）。 */
 export function stopAllSync(): void {
-  const proc = current
-  if (proc === null) return
-  killTree(proc.child.pid)
-  current = null
+  const dsh = current
+  if (dsh !== null) {
+    killTree(dsh.child.pid)
+    current = null
+  }
+  const desktop = desktopProc
+  if (desktop !== null) {
+    killTree(desktop.child.pid)
+    desktopProc = null
+  }
 }

@@ -105,18 +105,23 @@ export const useVersionsStore = defineStore('versions', () => {
     if (isBusy.value || version === '') return
     action.value = 'starting'
     error.value = ''
+    progressText.value = ''
     try {
-      await api.startVersion(version)
+      // 桌面端会推「下载 → 安装 → 启动」的进度；web/tui 不推，progressText 保持空
+      await api.startVersion(version, (progress) => {
+        progressText.value = progress.text
+      })
       await load()
       // 启动成功后默认用系统浏览器打开 web UI。
       // startVersion 会等到 dsh 打印就绪地址才 resolve，所以这里 url 通常已经在了；
-      // 万一还没有（拿不到地址），就只是不弹，不影响启动本身。
+      // 桌面端返回 url=null，不会走到 openExternal —— 桌面窗口本身就是反馈。
       const url = running.value?.url
       if (url) void window.sesame.openExternal(url)
     } catch (cause) {
       fail(cause)
     } finally {
       action.value = 'idle'
+      progressText.value = ''
     }
   }
 

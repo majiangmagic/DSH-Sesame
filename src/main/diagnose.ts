@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 启动诊断：**限时启动一次 dsh，读它自己打印的失败诊断，找出有问题的插件名**。
  *
  * 为什么这样做（都是实测得来的，不是设计推测）：
@@ -27,9 +27,11 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DiagnosedProblem, DiagnosisResult } from '@shared/diagnose'
-import { dshHome } from './dshHome'
+import { satisfies } from 'semver'
+import { dshHome, profileDir } from './dshHome'
 import { requireNode } from './runtime'
 import { bootArgs, envFor, killTree, READY_RE } from './runner'
+import { desktopLogPath, desktopRuntime, runDesktopCli } from './desktop'
 import { readSettings } from './settings'
 import { versionBin } from './paths'
 
@@ -229,4 +231,182 @@ export function diagnose(version: string, port: number): Promise<DiagnosisResult
     })
     child.on('close', (code) => { void finish(code === 0 ? 'ready' : 'failed') })
   })
+}
+
+/** 读 desktop profile 的 `compatibility.json`（已授予的兼容性豁免）。读不出来就当没有。 */
+function readExemptions(dir: string): Record<string, string[]> {
+  try {
+    const raw = JSON.parse(readFileSync(join(dir, 'compatibility.json'), 'utf8')) as unknown
+    if (raw === null || typeof raw !== 'object') return {}
+    const table =
+      'exemptions' in (raw as Record<string, unknown>)
+        ? (raw as { exemptions: unknown }).exemptions
+        : raw
+    if (table === null || typeof table !== 'object') return {}
+    const out: Record<string, string[]> = {}
+    for (const [key, value] of Object.entries(table as Record<string, unknown>)) {
+      if (Array.isArray(value)) out[key] = value.filter((item): item is string => typeof item === 'string')
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+/** 插件清单里我们关心的字段 */
+export interface PluginManifest {
+  name?: string
+  version?: string
+  peerDependencies?: Record<string, string>
+}
+
+/** 读插件清单；读不到返回 null。 */
+export function readPluginManifest(manifestPath: string): PluginManifest | null {
+  try {
+    return JSON.parse(readFileSync(manifestPath, 'utf8')) as PluginManifest
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 返回**不满足**的 `@deepseek-ai/dsh*` peer（空对象 = 兼容）。
+ *
+ * 判定逐条照搬 dsh 自己（`evaluatePluginCompatibility`）：
+ *  - 只看 `peerDependencies` 里以 `@deepseek-ai/dsh` 开头的项；
+ *  - `workspace:^` / `workspace:~` / `workspace:*` 等同于"当前运行时版本"；
+ *  - 用真实 `semver.satisfies(..., { includePrerelease: true })` 比。
+ *
+ * 用真 semver 而不是自己实现：**`0.2.0-rc.2` 不满足 `^0.1.1-rc.2`**（caret 上界是
+ * `<0.2.0`，且带预发布的版本还要满足"同一 [major,minor,patch] 上有预发布比较符"的规则）——
+ * 这条规则很容易实现错，实现错就会给出和 dsh 相反的结论。
+ */
+export function peerMismatch(manifest: PluginManifest, runtimeVersion: string): Record<string, string> {
+  const mismatched: Record<string, string> = {}
+  for (const [peerName, range] of Object.entries(manifest.peerDependencies ?? {})) {
+    if (peerName !== '@deepseek-ai/dsh' && !peerName.startsWith('@deepseek-ai/dsh-')) continue
+    const requirement = ['workspace:^', 'workspace:~', 'workspace:*'].includes(range)
+      ? runtimeVersion
+      : range
+    if (requirement.trim() === '' || !satisfies(runtimeVersion, requirement, { includePrerelease: true })) {
+      mismatched[peerName] = range
+    }
+  }
+  return mismatched
+}
+
+/**
+ * 算出某个 profile 里**哪些 bundle 会被 dsh 跳过**。
+ *
+ * 命中 `compatibility.json` 里已授予的豁免就不算跳过。
+ */
+function peerSkips(dir: string, runtimeVersion: string): Array<{ name: string; reason: string }> {
+  let bundles: string[] = []
+  try {
+    const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as {
+      dsh?: { profile?: { bundles?: string[] } }
+    }
+    bundles = manifest.dsh?.profile?.bundles ?? []
+  } catch {
+    return []
+  }
+
+  const exemptions = readExemptions(dir)
+  const out: Array<{ name: string; reason: string }> = []
+
+  for (const packageName of bundles) {
+    let manifest: { name?: string; version?: string; peerDependencies?: Record<string, string> }
+    try {
+      manifest = JSON.parse(readFileSync(join(dir, 'node_modules', packageName, 'package.json'), 'utf8')) as typeof manifest
+    } catch {
+      // 官方 bundle（@deepseek-ai/*）由 dsh 运行时自带，profile 里本来就没有 node_modules 项
+      if (packageName.startsWith('@deepseek-ai/')) continue
+      out.push({ name: packageName, reason: '读不到这个插件的 package.json（可能没装好），dsh 会跳过它' })
+      continue
+    }
+    const mismatched = peerMismatch(manifest, runtimeVersion)
+    if (Object.keys(mismatched).length === 0) continue
+
+    const key = `${manifest.name ?? packageName}@${manifest.version ?? ''}`
+    if ((exemptions[key] ?? []).includes(runtimeVersion)) continue
+
+    out.push({
+      name: packageName,
+      reason: `Plugin ${key} is incompatible with dsh ${runtimeVersion}: peerDependencies ${JSON.stringify(mismatched)}`
+    })
+  }
+
+  return out
+}
+
+/**
+ * 桌面端模式的诊断。
+ *
+ * **不能 spawn dsh** —— 版本池里的 `bin.js` 与桌面端自带的 CLI 都明确拒绝 `--profile desktop`
+ * （`managed exclusively by the Electron application`，实测两边都拒）；硬跑只会得到退出码 1
+ * 和一句**假的**"启动失败，诊断信息未指明具体插件"。
+ *
+ * 也**不能靠启动日志**：dsh 确实会在 boot 时 `reportSkippedBundles` 往 stderr 打印跳过原因，
+ * 但那是在 Electron **自己 spawn 的 RunAsNode 子进程**里，那行 stderr 被父进程接管了，
+ * 到不了我们继承的管道（实测 `<版本目录>/desktop.log` 里一条都没有）。
+ *
+ * 所以这里**自己算**：拿桌面端自带 CLI 报出的 dsh 版本，按 dsh 的同一条规则逐个 bundle 比
+ * `peerDependencies`（见 `peerSkips`）。顺带仍读一眼启动日志，作为"到底起没起"的旁证。
+ *
+ * **只读**：不 spawn 桌面端、不改任何东西。
+ */
+export async function diagnoseDesktop(version: string): Promise<DiagnosisResult> {
+  const started = Date.now()
+  const rt = desktopRuntime(version)
+
+  let logText = ''
+  try {
+    logText = readFileSync(desktopLogPath(version), 'utf8')
+  } catch {
+    // 没启动过就没有日志，不影响下面的判定
+  }
+  const rawTail = logText === '' ? [] : logText.split(/\r?\n/).slice(-RAW_TAIL_LINES)
+
+  if (rt === null) {
+    return {
+      outcome: 'failed',
+      durationMs: Date.now() - started,
+      problems: [],
+      skipped: [],
+      logPath: null,
+      rawTail: rawTail.length > 0 ? rawTail : [`${version} 的桌面端还没就绪（找不到它自带的运行时）。先启动一次桌面端。`]
+    }
+  }
+
+  // 桌面端真正在用的 dsh 版本 —— 兼容性判断必须用它，不能用版本池里那个
+  let runtimeVersion = ''
+  try {
+    const out: string[] = []
+    await runDesktopCli(rt, ['--version'], (line) => out.push(line))
+    runtimeVersion = out.join(' ').match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/)?.[0] ?? ''
+  } catch {
+    // 下面按"拿不到版本"处理
+  }
+
+  if (runtimeVersion === '') {
+    return {
+      outcome: 'failed',
+      durationMs: Date.now() - started,
+      problems: [],
+      skipped: [],
+      logPath: logText === '' ? null : desktopLogPath(version),
+      rawTail: ['读不到桌面端内置的 dsh 版本，无法判断插件兼容性。', ...rawTail]
+    }
+  }
+
+  const skipped = peerSkips(profileDir('desktop'), runtimeVersion)
+  return {
+    outcome: skipped.length > 0 ? 'failed' : 'ready',
+    durationMs: Date.now() - started,
+    // 桌面端这条路没有 `Failed plugins` 段；能报的就是"哪些 bundle 会被跳过"
+    problems: [],
+    skipped,
+    logPath: logText === '' ? null : desktopLogPath(version),
+    rawTail
+  }
 }
