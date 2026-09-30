@@ -332,6 +332,7 @@ export async function startVersion(
       const summary: string[] = []
       if (report.installed.length > 0) summary.push(`新装 ${report.installed.length} 个插件`)
       if (report.patched.length > 0) summary.push(`补丁条目 ${report.patched.length} 条`)
+      if (report.aligned.length > 0) summary.push(`启停对齐 ${report.aligned.length} 条`)
       if (report.exempted.length > 0) summary.push(`版本声明落后已开闸 ${report.exempted.length} 个`)
       if (summary.length > 0) pushTagged('桌面端', `同步完成：${summary.join(' · ')}`)
       if (report.failed.length > 0) {

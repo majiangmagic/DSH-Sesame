@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import {
   DIAGNOSE_CHANNELS,
@@ -145,23 +143,15 @@ export function registerBusinessIpc(): void {
       setPluginEnabled(dir, packageName, enabled)
 
       /*
-       * 同时写桌面端 profile。
+       * **不在这里写桌面端。** 只改 web —— 桌面端的那份由 `syncWebToDesktop` 在**启动前对齐**
+       * （见 sync.ts 的 `alignDisabledFlags`）。
        *
-       * 桌面端是**独立的一套 profile**（官方设计：独占 `profiles/desktop`），不写它就不会跟着关。
-       * 这里刻意**尽力而为**：桌面端没装这个插件时是空操作；失败也只记一行日志 ——
-       * 绝不能因为桌面端的问题让 web 的开关做不了。
+       * 为什么不做实时双写：补丁层里【启用】这个动作是**删掉一条**，而启动时的合并天生只会
+       * "补缺"、不会删 —— 所以曾经靠这里实时补一刀来兜。现在对齐逻辑补上了那个方向，
+       * 同步就只需要**一个**触发点（启动前），语义也更干净：web 是唯一基准，桌面端照着对齐。
+       *
+       * 代价（已知并接受）：桌面端**正在跑**时切开关，要下次启动桌面端才生效。
        */
-      try {
-        const desktopDir = profileDir('desktop')
-        const installedThere = existsSync(join(desktopDir, 'node_modules', packageName, 'package.json'))
-        if (installedThere) setPluginEnabled(desktopDir, packageName, enabled)
-      } catch (cause) {
-        pushTagged(
-          '桌面端',
-          '同步插件开关失败（不影响 web）：' + (cause instanceof Error ? cause.message : String(cause))
-        )
-      }
-
       return listPlugins(dir)
     }
   )

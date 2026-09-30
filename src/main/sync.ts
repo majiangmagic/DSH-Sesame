@@ -31,6 +31,8 @@ export interface SyncResult {
   present: string[]
   /** 同步过去的补丁条目 / 插入行的 id（provider、默认模型、MCP 服务器…） */
   patched: string[]
+  /** 启停状态被对齐的行 id（web 里改了开关，这里把它抻平） */
+  aligned: string[]
   /** 因为"版本声明落后"而开了兼容豁免的插件（装了但 dsh 本来会拦） */
   exempted: string[]
   /** 装了但失败的插件（多半是连豁免都救不了的硬错误） */
@@ -64,6 +66,18 @@ function installedVersion(profile: string, name: string): string | null {
   }
 }
 
+/*
+ * 行尾一律允许注释 —— 和 patch.ts 的 TAIL 保持一致。
+ *
+ * 不这么写会出事：dsh-pet 的补丁行 id 后面就带中文注释，而 `\s*$` 匹配不上 → 「已存在」判不出来
+ * → 被当成缺失 → **重复追加**。而顶层 insert 是追加且不去重的，同一个 id 进去两次 = 插件挂载两份。
+ * id 的字符集是 [A-Za-z0-9_.-]，不含 `#`，所以"行尾 # 之后是注释"没有歧义。
+ */
+const ID_LINE = /^(\s*)- id:\s*['"]?([A-Za-z0-9_.-]+)['"]?\s*(?:#.*)?$/
+const DISABLED_LINE = /^\s*disabled:\s*(true|false)\s*(?:#.*)?$/
+const TL_ID = /^- id:\s*['"]?([A-Za-z0-9_.-]+)['"]?\s*(?:#.*)?$/
+const ROW_ID = /^ {4}- id:\s*['"]?([A-Za-z0-9_.-]+)['"]?\s*(?:#.*)?$/
+
 /**
  * 抓出补丁文本里出现过的**所有行 id**（任意缩进的 `- id: X`）。
  *
@@ -74,10 +88,104 @@ function installedVersion(profile: string, name: string): string | null {
 function allRowIds(text: string): Set<string> {
   const ids = new Set<string>()
   for (const line of text.split(/\r?\n/)) {
-    const match = /^\s*- id:\s*['"]?([A-Za-z0-9_.-]+)['"]?\s*$/.exec(line)
-    if (match) ids.add(match[1] as string)
+    const match = ID_LINE.exec(line)
+    if (match) ids.add(match[2] as string)
   }
   return ids
+}
+
+/** 一个顶层条目在行数组里的位置与状态。 */
+interface PatchEntry {
+  id: string | null
+  start: number
+  /** 独占结尾（不包含） */
+  end: number
+  disabled: boolean
+  /** 整条只有 `- id:` + `disabled:` —— 就是 setPluginEnabled 写下的"禁用标记" */
+  disableOnly: boolean
+}
+
+/** 按顶层条目切开补丁（每段以列 0 的 `- ` 开头），并记下禁用状态。 */
+function patchEntries(lines: string[]): PatchEntry[] {
+  const out: PatchEntry[] = []
+  let cursor = 0
+  while (cursor < lines.length) {
+    if (!/^- /.test(lines[cursor] ?? '')) {
+      cursor += 1
+      continue
+    }
+    const start = cursor
+    const idMatch = TL_ID.exec(lines[start] ?? '')
+    cursor += 1
+    while (cursor < lines.length && !/^- /.test(lines[cursor] ?? '')) cursor += 1
+    const body = lines.slice(start, cursor)
+    const keys = body.filter((line) => line.trim() !== '' && !line.trim().startsWith('#'))
+    out.push({
+      id: idMatch ? (idMatch[1] as string) : null,
+      start,
+      end: cursor,
+      disabled: body.some((line) => DISABLED_LINE.test(line)),
+      disableOnly: idMatch !== null && keys.length <= 2
+    })
+  }
+  return out
+}
+
+/**
+ * 按 web 对齐"插件的启用 / 停用"状态。
+ *
+ * 为什么必须有这一步：补丁层里
+ *   **停用** = 追加一条 `- id: <行id>` + `disabled: true`；
+ *   **启用** = 把这条**删掉**。
+ * 而"只补缺"的合并只会往里加，天生传不了【启用】—— web 里启用后那条没了，桌面端那条还在。
+ * 这里补上反方向。
+ *
+ * 只动两类，**绝不碰桌面端独有的条目**：
+ *   ① 两边都有的顶层条目 → `disabled` 对齐成 web 的样子
+ *   ② 桌面端有、web 没有、且整条只有 `id + disabled` 的 → 删掉（web 里启用后留下的过期标记）
+ */
+function alignDisabledFlags(webText: string, desktopText: string): { text: string; changed: string[] } {
+  const webState = new Map<string, boolean>()
+  for (const entry of patchEntries(webText.split(/\r?\n/))) {
+    if (entry.id !== null) webState.set(entry.id, entry.disabled)
+  }
+
+  const lines = desktopText.split(/\r?\n/)
+  const changed: string[] = []
+  // 从后往前改 —— 前面条目的行号不会因为后面的增删而漂移
+  for (const entry of patchEntries(lines).reverse()) {
+    if (entry.id === null) continue
+    const want = webState.get(entry.id)
+
+    if (want === undefined) {
+      if (entry.disableOnly && entry.disabled) {
+        lines.splice(entry.start, entry.end - entry.start)
+        changed.push(entry.id)
+      }
+      continue
+    }
+    if (want === entry.disabled) continue
+
+    if (want) {
+      const indent = (/^(\s*)/.exec(lines[entry.start] ?? '')?.[1] ?? '') + '  '
+      lines.splice(entry.start + 1, 0, `${indent}disabled: true`)
+    } else {
+      for (let i = entry.end - 1; i > entry.start; i -= 1) {
+        if (DISABLED_LINE.test(lines[i] ?? '')) {
+          lines.splice(i, 1)
+          break
+        }
+      }
+      // 去掉之后整条只剩 `- id: X` → 和 dsh 的"启用"一样，把整条删掉
+      const rest = lines
+        .slice(entry.start, entry.end - 1)
+        .filter((line) => line.trim() !== '' && !line.trim().startsWith('#'))
+      if (rest.length <= 1) lines.splice(entry.start, entry.end - 1 - entry.start)
+    }
+    changed.push(entry.id)
+  }
+
+  return { text: lines.join('\n'), changed }
 }
 
 /** 按顶层条目切开补丁数组（每段以列 0 的 `- ` 开头）。 */
@@ -91,7 +199,7 @@ function topLevelEntries(text: string): Array<{ id: string | null; text: string 
       continue
     }
     const start = cursor
-    const idMatch = /^- id:\s*['"]?([A-Za-z0-9_.-]+)['"]?\s*$/.exec(lines[start] ?? '')
+    const idMatch = TL_ID.exec(lines[start] ?? '')
     cursor += 1
     while (cursor < lines.length && !/^- /.test(lines[cursor] ?? '')) cursor += 1
     out.push({
@@ -113,7 +221,7 @@ function insertRows(entryText: string): Array<{ id: string | null; text: string 
       continue
     }
     const start = cursor
-    const idMatch = /^ {4}- id:\s*['"]?([A-Za-z0-9_.-]+)['"]?\s*$/.exec(lines[start] ?? '')
+    const idMatch = ROW_ID.exec(lines[start] ?? '')
     cursor += 1
     while (
       cursor < lines.length &&
@@ -139,16 +247,21 @@ function readPatch(path: string): string {
 }
 
 /**
- * 把 web 补丁层里**桌面端还没有的条目**机械搬过去。
+ * 把 web 补丁层对齐到桌面端。
  *
- * 覆盖两种形态：
- *  - 顶层 `- id: X` 条目（provider、agent-default-model、qqbot、ui-settings-general…）
- *  - `- insert:` 块里的行 —— **MCP 服务器就是这一种**，按行 id 逐条判断
+ * 两步：
+ *  ① **补缺** —— web 有、桌面端没有的条目搬过去。覆盖两种形态：
+ *      顶层 `- id: X` 条目（provider、agent-default-model、qqbot、ui-settings-general…）
+ *      `- insert:` 块里的行 —— **MCP 服务器就是这一种**，按行 id 逐条判断
+ *     判重用 `allRowIds(next)`（在整个补丁里出现过即算有），理由见它的注释。
+ *  ② **对齐启停状态** —— 见 `alignDisabledFlags`：这一步才能把"重新启用"传过去。
  *
- * 判重用 `allRowIds(next)`（在整个补丁里出现过即算有），理由见它的注释。
- * 只补缺，不覆盖、不删除桌面端独有的条目。
+ * 全程**不覆盖、不删除桌面端独有的条目**（它的 ui-chat / ui-settings-account 是引导状态）。
  */
-function mergePatchEntries(onProgress: (p: SyncProgress) => void): string[] {
+function mergePatchEntries(onProgress: (p: SyncProgress) => void): {
+  patched: string[]
+  aligned: string[]
+} {
   const webText = readPatch(patchPathOf(profileDir(WEB)))
   const desktopPath = patchPathOf(profileDir(DESKTOP))
   const before = readPatch(desktopPath)
@@ -179,7 +292,11 @@ function mergePatchEntries(onProgress: (p: SyncProgress) => void): string[] {
     next = `${next.replace(/\s+$/, '')}\n- insert:\n${pendingRows.join('\n')}\n`
   }
 
-  if (added.length > 0) {
+  // ② 对齐启停状态（补上"只补缺"传不了的【启用】方向）
+  const aligned = alignDisabledFlags(webText, next)
+  next = aligned.text
+
+  if (added.length > 0 || aligned.changed.length > 0) {
     // 留一份 .bak，和 patch.ts 的写入策略保持一致
     try {
       if (before !== '') writeFileSync(`${desktopPath}.bak`, before, 'utf8')
@@ -187,9 +304,12 @@ function mergePatchEntries(onProgress: (p: SyncProgress) => void): string[] {
       // 备份失败不阻断
     }
     writeFileSync(desktopPath, next, 'utf8')
-    onProgress({ text: `已同步补丁条目：${added.join('、')}` })
+    const notes: string[] = []
+    if (added.length > 0) notes.push(`新增 ${added.join('、')}`)
+    if (aligned.changed.length > 0) notes.push(`启停对齐 ${aligned.changed.join('、')}`)
+    onProgress({ text: `已同步补丁层：${notes.join('；')}` })
   }
-  return added
+  return { patched: added, aligned: aligned.changed }
 }
 
 /** 挑一个已解压、且带完整运行时的桌面端版本；优先用调用方指定的那个。 */
@@ -242,7 +362,7 @@ export async function syncWebToDesktop(
   onProgress: (p: SyncProgress) => void = () => {},
   version?: string
 ): Promise<SyncResult> {
-  const result: SyncResult = { installed: [], present: [], patched: [], exempted: [], failed: [] }
+  const result: SyncResult = { installed: [], present: [], patched: [], aligned: [], exempted: [], failed: [] }
 
   const picked = pickDesktop(version)
   if (picked === null) return result
@@ -313,8 +433,10 @@ export async function syncWebToDesktop(
     }
   }
 
-  // ② 补丁层：provider / 默认模型 / MCP 服务器 / 其他条目，机械搬缺的那些
-  result.patched = mergePatchEntries(onProgress)
+  // ② 补丁层：先补缺（provider / 默认模型 / MCP 服务器…），再对齐启停状态
+  const patch = mergePatchEntries(onProgress)
+  result.patched = patch.patched
+  result.aligned = patch.aligned
 
   return result
 }
