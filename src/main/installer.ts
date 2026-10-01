@@ -95,15 +95,14 @@ function run(
     const child = spawn(command.file, finalArgs, {
       cwd: options.cwd,
       shell: useShell,
-      windowsHide: true,
-      env: {
-        ...process.env,
-        // 别让 npm 的更新提示/进度条干扰逐行解析
-        npm_config_update_notifier: 'false',
-        npm_config_progress: 'false',
-        npm_config_audit: 'false',
-        npm_config_fund: 'false'
-      }
+      windowsHide: true
+      /*
+       * 这里原本还关了一堆 npm 降噪开关（update_notifier / progress / audit / fund）。
+       * 去掉了：它们是**纯装饰性**的，代价却是每次 spawn 都往子进程环境里塞四个变量，
+       * 而这些变量会不会被误读、跟别的 npm 调用冲突，都没人验证过。
+       * （真正 load-bearing 的是 pluginInstall 里的 `npm_config_reporter: append-only`，
+       * 那个是为了拿到逐行输出，保留。）
+       */
     })
 
     let buffer = ''

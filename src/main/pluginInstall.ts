@@ -1,4 +1,4 @@
-﻿import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { decodeChunk } from './textDecode'
 import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
@@ -182,7 +182,6 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
         ...process.env,
         DSH_HOME: dshHome(),
         DSH_NODE: node.path,
-        npm_config_update_notifier: 'false',
         // 取自 dshmarket（lib/install.js:131）："the market runs pnpm with CI=true
         // (TTY hangs)"。pnpm 在非 CI 环境下会走交互分支，遇到需要确认/等待输入的
         // 情形就永久挂住 —— 正是我遇到过的症状（90 秒零输出、永不结束）。

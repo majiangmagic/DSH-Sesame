@@ -5,7 +5,7 @@ import type { VersionStatus } from '@shared/versions'
 import { dshHome, profileDir } from './dshHome'
 import { versionBin } from './paths'
 import { createServer } from 'node:net'
-import { requireNode } from './runtime'
+import { nodeOptionsValue, requireNode } from './runtime'
 import { pushTagged } from './logbus'
 import { readSettings, splitArgs } from './settings'
 import { desktopLogPath, ensureDesktop, launchDesktop, type DesktopProgress } from './desktop'
@@ -98,14 +98,12 @@ export function envFor(version: string, node: { path: string }, profile: string)
     DSH_BIN: bin,
     DSH_VERSION: version,
     DSH_PROFILE: profile,
-    // NODE_OPTIONS 是按空格分词的，所以只写不含空格的裸参数
-    NODE_OPTIONS: [
-      '--use-system-ca',
-      process.env['NODE_OPTIONS'],
-      '--max-http-header-size=131072'
-    ]
-      .filter(Boolean)
-      .join(' '),
+    /*
+     * NODE_OPTIONS 从 runtime.ts 拿 —— 探测 node 的时候用的是同一个值（见那边 probe 的注释），
+     * 两边必须一致，否则"探测通过"就没意义了。这也是原来那个 bug 的根：
+     * 这里无条件注入参数，却没问过目标 node 接不接受。
+     */
+    NODE_OPTIONS: nodeOptionsValue(),
     npm_config_ignore_workspace_root_check: 'true',
     // Windows 上 Python 默认按控制台代码页写输出（中文 = GBK），终端页因此出现乱码。
     // 这两个变量让它直接输出 UTF-8（实测：Blender / Unity 的 MCP 服务都是 Python）。

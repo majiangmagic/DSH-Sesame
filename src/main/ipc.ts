@@ -264,9 +264,16 @@ export function registerBusinessIpc(): void {
   )
 }
 
-/** 取 profile 名（默认 web）；单独抽出来是因为市场模块的入参是"名字"而不是目录 */
+/**
+ * 取 profile 名（固定 web）；单独抽出来是因为市场模块的入参是"名字"而不是目录。
+ *
+ * **不读 `DSH_PROFILE`。** 那个变量是启动器**写给孩子进程**的（告诉 dsh 用哪个 profile），
+ * 反过来决定启动器自己的行为就是方向错了 —— 用户机器上一个残留值会悄悄改变
+ * "插件开关作用在哪个 profile 上"。启动器的基准 profile 是常量，不受环境变量影响。
+ * （可写：envFor 仍然会把当前 profile 传给 dsh；只是启动器自己不再回头读它。）
+ */
 function profileDirName(): string {
-  return process.env.DSH_PROFILE?.trim() || 'web'
+  return 'web'
 }
 
 /** 探测用：内部 API 缺失时不要让它把 IPC 调用变成异常 */

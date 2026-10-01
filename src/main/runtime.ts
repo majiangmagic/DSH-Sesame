@@ -20,7 +20,7 @@ import { app } from 'electron'
  *
  * 用真正的 `node.exe` 跑同一份 bin.js，**1.8 秒就打印 `dsh web: http://…`**。
  *
- * 顺序：`DSH_NODE` 环境变量 → PATH 上的 node → 应用自带的 `<app>/node/node.exe`。
+ * 顺序：`SESAME_NODE` → 应用自带的 `<app>/node/node.exe` → PATH 上的 node。
  * 自带运行时是给"用户机器上没装 Node"准备的（同类启动器常这么做），现在还没有，
  * 所以找不到时会明确报错，而不是退化成一个必然失败的启动。
  */
@@ -52,15 +52,43 @@ function bundledNode(): string | null {
 }
 
 /**
- * 校验候选确实是 Node（而不是别的同名程序），返回版本字符串。
+ * 注入给所有 dsh 子进程的 `NODE_OPTIONS`。
  *
- * 只认 `--version` 输出形如 `v24.19.0`：Electron 的 `electron.exe --version` 输出的是
- * `v44.4.5` 这种 Electron 版本号，也会长得像，所以光看"能跑"不够 —— 但真正的判据是
- * 它跑 dsh 会不会被 V8 指纹拒绝，那只有启动时才知道。这里只排除明显不是 Node 的情况。
+ * 放在这里（而不是 runner.ts）是为了让**探测**与**实际注入**用同一个值 —— 两边一飘，探测就白做了。
+ *
+ *   `--use-system-ca`          用系统证书库。挂代理 / TUN（mihomo 之类）做 TLS 中间人时，
+ *                              Node 默认只认自带根证书 → 握手失败
+ *   `--max-http-header-size`   放宽 header 上限
+ *
+ * `NODE_OPTIONS` 按空格分词，所以只写不含空格的裸参数。
+ */
+export function nodeOptionsValue(): string {
+  return ['--use-system-ca', process.env['NODE_OPTIONS'], '--max-http-header-size=131072']
+    .filter(Boolean)
+    .join(' ')
+}
+
+/**
+ * 校验候选确实是 Node，**并且能吃下我们要注入的 `NODE_OPTIONS`**。
+ *
+ * 为什么连 NODE_OPTIONS 一起验：`NODE_OPTIONS` 是**白名单机制** —— 出现不被允许的参数时，
+ * node 不是忽略它，而是**拒绝启动**（实测退出码 9，报
+ * `--use-system-ca is not allowed in NODE_OPTIONS`）。而"用哪个 node"是运行时才定的，
+ * 不能假设用户机器上那个一定接受。所以把这件事**在探测阶段就问清楚**：不合格的候选直接跳过，
+ * 由后面的候选顶上 —— 而不是等 spawn 出来一个死进程。
+ *
+ * 只认形如 `v24.19.0` 的输出：Electron 的 `electron.exe --version` 打印 `v44.4.5` 也长得像，
+ * 所以光看"能跑"不够；但真正的判据（V8 指纹）只有启动时才知道，这里只排除明显不对的。
  */
 function probe(path: string): string | null {
   try {
-    const out = execFileSync(path, ['--version'], { encoding: 'utf8', timeout: 5000, windowsHide: true })
+    const out = execFileSync(path, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+      // 带上真正会用的 NODE_OPTIONS —— 不接受它的 node 会在这里就失败
+      env: { ...process.env, NODE_OPTIONS: nodeOptionsValue() }
+    })
     const version = out.trim()
     return /^v\d+\.\d+\.\d+/.test(version) ? version : null
   } catch {
@@ -72,14 +100,23 @@ function probe(path: string): string | null {
 export function resolveNode(): (NodeRuntime & { version: string }) | null {
   const candidates: Array<{ path: string; kind: NodeRuntime['kind'] }> = []
 
-  const fromEnv = process.env['SESAME_NODE'] ?? process.env['DSH_NODE']
+  /*
+   * 顺序：**显式指定 → 自带 → PATH**。
+   *
+   * 自带那个必须排在 PATH 之前：它是随包发布的、我们验证过的 v24.19.0；而用户机器上 PATH 里
+   * 是哪个版本完全不可控 —— 实测有台新机器就因为 PATH 里那个不接受 --use-system-ca，
+   * 整个 dsh 起不来。自带运行时存在的**全部意义**就是"不依赖用户机器"，把它排最后等于白带。
+   *
+   * 三者都是**候选**：探测不过就换下一个（见 probe）。不会因为"你指定了"就死给用户看。
+   */
+  const fromEnv = process.env['SESAME_NODE']
   if (fromEnv && existsSync(fromEnv)) candidates.push({ path: fromEnv, kind: 'env' })
-
-  const onPath = findOnPath()
-  if (onPath) candidates.push({ path: onPath, kind: 'path' })
 
   const bundled = bundledNode()
   if (bundled) candidates.push({ path: bundled, kind: 'bundled' })
+
+  const onPath = findOnPath()
+  if (onPath) candidates.push({ path: onPath, kind: 'path' })
 
   for (const candidate of candidates) {
     const version = probe(candidate.path)
