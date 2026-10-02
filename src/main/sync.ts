@@ -258,6 +258,31 @@ function escapePlaceholder(text: string): string {
   return text.replace(/^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
 }
 
+/**
+ * **只做一件事**：把桌面端补丁层里那个 `[]` 占位符注释掉。返回是否真的改了。
+ *
+ * 为什么单独抽出来、而不是只留在 mergePatchEntries 里：它在那边只是**中间的一步**，
+ * 而 mergePatchEntries 前面还有"装插件"那一大段循环 —— 那段只要抛一次异常，
+ * 整段同步就被 runner 的 catch 吞掉，**修复跟着一起没跑**（实测：用户覆盖安装了新包，
+ * 但弹窗照旧，因为同步在装插件那步就中断了）。
+ *
+ * 所以启动端在**拉起桌面端之前会再单独调一次这个**，单独一层 try/catch —— 谁都挡不住它。
+ */
+export function repairDesktopPatch(): { changed: boolean; path: string } {
+  const path = patchPathOf(profileDir(DESKTOP))
+  const before = readPatch(path)
+  if (before === '') return { changed: false, path }
+  const next = escapePlaceholder(before)
+  if (next === before) return { changed: false, path }
+  try {
+    writeFileSync(`${path}.bak`, before, 'utf8')
+  } catch {
+    // 备份失败不阻断
+  }
+  writeFileSync(path, next, 'utf8')
+  return { changed: true, path }
+}
+
 function readPatch(path: string): string {
   try {
     return readFileSync(path, 'utf8')

@@ -9,7 +9,7 @@ import { nodeOptionsValue, pathWithBundledBin, requireNode } from './runtime'
 import { pushTagged } from './logbus'
 import { readSettings, splitArgs } from './settings'
 import { desktopLogPath, ensureDesktop, launchDesktop, type DesktopProgress } from './desktop'
-import { syncWebToDesktop } from './sync'
+import { repairDesktopPatch, syncWebToDesktop } from './sync'
 
 /**
  * dsh 进程的运行器 —— 「启动 / 停止」的真实实现。
@@ -344,6 +344,20 @@ export async function startVersion(
       }
     } catch (cause) {
       pushTagged('桌面端', '同步失败（不影响启动）：' + (cause instanceof Error ? cause.message : String(cause)))
+    }
+
+    /*
+     * 拉起之前**无条件**再修一次补丁层的 `[]` 占位符（见 repairDesktopPatch 的注释）。
+     *
+     * 单独一层 try/catch：它绝对不能因为同步里别处（比如装插件那段）出错就被跳过 ——
+     * 这个占位符写坏会让桌面端**直接起不来**（"DeepSeek Harness is unavailable"），
+     * 属于必须兜住的那一类。
+     */
+    try {
+      const repaired = repairDesktopPatch()
+      if (repaired.changed) pushTagged('桌面端', `已修复补丁层占位符（[] → # []）：${repaired.path}`)
+    } catch (cause) {
+      pushTagged('桌面端', '修复补丁层占位符失败：' + (cause instanceof Error ? cause.message : String(cause)))
     }
 
     onDesktopProgress?.({ phase: 'launch', text: '正在启动桌面端…' })
