@@ -238,6 +238,26 @@ function insertRows(entryText: string): Array<{ id: string | null; text: string 
   return out
 }
 
+/**
+ * 把补丁层里的 `[]` 占位符注释掉（`[]` → `# []`）。
+ *
+ * 补丁层的初始模板是"注释 + 一个 `[]`"（表示空数组）。但 YAML 里 `[]` 是**完整的流式数组**，
+ * 后面再接块式条目就是**非法 YAML**：
+ *
+ *     # a top-level YAML array of load overrides, disables, and inserts
+ *     []
+ *     - id: ui-settings-general      ← 解析器在这里报错
+ *
+ * 实测后果：整个桌面端起不来，弹 "DeepSeek Harness is unavailable"。
+ *
+ * ⚠️ patch.ts 的 `appendDisableBlock` 早就有这一步处理 —— sync.ts 当时**自己重写了一遍**
+ * 追加逻辑却漏掉它，于是只在"补丁还是初始模板"的机器上炸（老机器补丁里已有条目，所以没事）。
+ * 这里补上。它同时**能修已经写坏的文件**（只是把那行 `[]` 注释掉）。
+ */
+function escapePlaceholder(text: string): string {
+  return text.replace(/^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
+}
+
 function readPatch(path: string): string {
   try {
     return readFileSync(path, 'utf8')
@@ -265,7 +285,12 @@ function mergePatchEntries(onProgress: (p: SyncProgress) => void): {
   const webText = readPatch(patchPathOf(profileDir(WEB)))
   const desktopPath = patchPathOf(profileDir(DESKTOP))
   const before = readPatch(desktopPath)
-  let next = before
+  /*
+   * 先注释掉 `[]` 占位符再往里加 —— 否则 `[]` 后面接块式条目就是非法 YAML，
+   * 桌面端会直接起不来（见 escapePlaceholder 的注释）。老机器补丁里已有条目所以没炸，
+   * 补丁还是初始模板的机器一追加就中。
+   */
+  let next = escapePlaceholder(before)
   const present = allRowIds(next)
   const added: string[] = []
   const pendingRows: string[] = []
@@ -296,7 +321,7 @@ function mergePatchEntries(onProgress: (p: SyncProgress) => void): {
   const aligned = alignDisabledFlags(webText, next)
   next = aligned.text
 
-  if (added.length > 0 || aligned.changed.length > 0) {
+  if (added.length > 0 || aligned.changed.length > 0 || next !== before) {
     // 留一份 .bak，和 patch.ts 的写入策略保持一致
     try {
       if (before !== '') writeFileSync(`${desktopPath}.bak`, before, 'utf8')
