@@ -255,7 +255,27 @@ function insertRows(entryText: string): Array<{ id: string | null; text: string 
  * 这里补上。它同时**能修已经写坏的文件**（只是把那行 `[]` 注释掉）。
  */
 function escapePlaceholder(text: string): string {
-  return text.replace(/^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
+  /*
+   * 两条限制，都是为了"只修该修的、不碰别的环境能用的"：
+   *
+   * ① **只认列 0 的 `[]`**（不允许缩进）。
+   *    模板占位符永远在列 0；而 `config` 里那种**缩进的 `[]` 是合法的嵌套空数组值**：
+   *        - id: a
+   *          config:
+   *            items:
+   *              []        ← 这是数据，不是占位符 —— 注释掉就把配置毁了
+   *
+   * ② **只有文件里存在块式条目时才动**。
+   *    `[]` 单独存在是**合法的空补丁**（初始模板就是"注释 + []"）。无脑转义会让文件变成
+   *    "只有注释" → YAML 解析成 `null` → 别的 dsh 版本反而可能拒绝。
+   *
+   * 满足这两条时，`[]` 与块式条目共存 = 非法 YAML（`[]` 是完整的流式数组，
+   * 后面不能再接 `- …`）—— 那才是需要修的情况。
+   */
+  if (!/^\[[ \t]*\][ \t]*(?:#.*)?$/m.test(text)) return text
+  const withoutPlaceholder = text.replace(/^\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '')
+  if (!/^- /m.test(withoutPlaceholder)) return text
+  return text.replace(/^\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|$)/mu, '# []\n')
 }
 
 /**

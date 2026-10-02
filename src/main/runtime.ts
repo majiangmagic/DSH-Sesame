@@ -69,12 +69,19 @@ export function bundledBinDir(): string | null {
   return existsSync(dir) ? dir : null
 }
 
-/** 把自带垫片目录插到 PATH 最前面（这个构建没带 pnpm 就原样返回）。 */
+/**
+ * 把自带垫片目录**追加到 PATH 末尾**（当兜底），这个构建没带 pnpm 就原样返回。
+ *
+ * ⚠️ 刻意**追加而不是插到最前面**：插到最前面会把用户自己装的 pnpm 顶掉 ——
+ * 比如用户装的是 11.24.0，我们自带的是 11.7.0，就会被无声降级，别的项目可能因此出问题。
+ * 追加的语义是"**你没有我才补上**"：用户有 pnpm 就用用户的，没有才用自带的。
+ * 这样只解决"缺 pnpm 装不了插件"，不会改变任何本来能用的机器。
+ */
 export function pathWithBundledBin(current: string = process.env['PATH'] ?? ''): string {
   const bin = bundledBinDir()
   if (bin === null) return current
   const separator = process.platform === 'win32' ? ';' : ':'
-  return current === '' ? bin : `${bin}${separator}${current}`
+  return current === '' ? bin : `${current}${separator}${bin}`
 }
 
 /**
