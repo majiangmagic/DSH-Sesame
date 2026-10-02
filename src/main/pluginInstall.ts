@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { cmpVer, parseVer } from './registry'
 import { dshHome, profileDir } from './dshHome'
 import { listInstalled } from './versions'
-import { requireNode } from './runtime'
+import { pathWithBundledBin, requireNode } from './runtime'
 
 /**
  * 插件安装 / 卸载 —— **走 dsh 自己的 `plugin` 命令**。
@@ -182,6 +182,9 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
         ...process.env,
         DSH_HOME: dshHome(),
         DSH_NODE: node.path,
+        // 把自己带的 pnpm 垫片目录插到 PATH 最前面 —— dsh 的插件管理器调的是 PATH 上的
+        // `pnpm`，插进去就命中我们自带的那个，不再取决于用户机器上装没装
+        PATH: pathWithBundledBin(),
         // 取自 dshmarket（lib/install.js:131）："the market runs pnpm with CI=true
         // (TTY hangs)"。pnpm 在非 CI 环境下会走交互分支，遇到需要确认/等待输入的
         // 情形就永久挂住 —— 正是我遇到过的症状（90 秒零输出、永不结束）。

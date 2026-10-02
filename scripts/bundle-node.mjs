@@ -11,7 +11,7 @@
  * 产物目录 node-bundle/ 在 .gitignore 里 —— 88 MB 的二进制不该进 git 历史。
  */
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -72,6 +72,92 @@ if (sevenZip !== null) {
   console.log(`  来源  ${sevenZip}`)
 } else {
   console.warn('  警告：没找到 7za.exe —— 用户机器上「解压桌面端」会失败。')
+}
+
+/*
+ * 顺带把 pnpm 放进包（<应用目录>/node/pnpm + <应用目录>/node/bin/pnpm.cmd）。
+ *
+ * 为什么必须带：dsh 的插件管理器**调用 PATH 上的 `pnpm`**（它自己不带）。启动器既然已经
+ * 自带 node 了，就不能再指望用户机器上装了 pnpm —— 实测有台新机器因此报
+ * `'pnpm' 不是内部或外部命令`，插件完全装不了。
+ *
+ * 官方桌面端就是这么干的：它的 resources/runtime 里 node 与 pnpm 一起带
+ * （versions.json: node 24.18.1 / pnpm 11.7.0），所以桌面端那条路从来不缺 pnpm。
+ *
+ * 来源优先 corepack 缓存 —— node 自带的 corepack 把 pnpm 真身下在这里：
+ *   %LOCALAPPDATA%\node\corepack\v1\pnpm\<版本>\
+ * 优先 11.7.0（与官方桌面端一致），没有就取版本最高的那个。
+ */
+const PREFERRED_PNPM = '11.7.0'
+
+const pnpm = findPnpm()
+if (pnpm !== null) {
+  cpSync(pnpm.dir, join(destDir, 'pnpm'), { recursive: true })
+  const binDir = join(destDir, 'bin')
+  mkdirSync(binDir, { recursive: true })
+  /*
+   * 垫片：dsh 调 `pnpm` 时命中它。路径用 %~dp0（脚本自身目录，带尾部反斜杠），
+   * 所以整个 node/ 目录可以整体挪位置，不会因为换个安装目录就失效。
+   */
+  const shim = isWin
+    ? '@ECHO OFF\r\n"%~dp0..\\node.exe" "%~dp0..\\pnpm\\bin\\pnpm.cjs" %*\r\n'
+    : '#!/bin/sh\nexec "$(dirname "$0")/../node" "$(dirname "$0")/../pnpm/bin/pnpm.cjs" "$@"\n'
+  writeFileSync(join(binDir, isWin ? 'pnpm.cmd' : 'pnpm'), shim, 'utf8')
+  console.log(`  已内置 pnpm ${pnpm.version}`)
+  console.log(`  来源  ${pnpm.dir}`)
+  console.log(`  垫片  ${join(binDir, isWin ? 'pnpm.cmd' : 'pnpm')}`)
+} else {
+  console.warn('  警告：没找到 pnpm —— 用户机器上「安装插件」会失败（dsh 调的是 PATH 上的 pnpm）。')
+  console.warn(`        先跑一次 \`corepack prepare pnpm@${PREFERRED_PNPM} --activate\` 或 \`npm i -g pnpm\`，再重新打包。`)
+}
+
+/** 找 pnpm 真身（那个含 bin/pnpm.cjs 的目录）。 */
+function findPnpm() {
+  const found = []
+  const consider = (dir) => {
+    if (!dir || !existsSync(join(dir, 'bin', 'pnpm.cjs'))) return
+    let version = ''
+    try {
+      version = String(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version ?? '')
+    } catch {
+      // 读不出版本也照样能用，下面排序时排最后
+    }
+    found.push({ dir, version })
+  }
+
+  consider(join(ROOT, 'node_modules', 'pnpm'))
+
+  const corepack = process.env.LOCALAPPDATA
+    ? join(process.env.LOCALAPPDATA, 'node', 'corepack', 'v1', 'pnpm')
+    : ''
+  if (corepack !== '' && existsSync(corepack)) {
+    try {
+      for (const entry of readdirSync(corepack)) consider(join(corepack, entry))
+    } catch {
+      // 读不动就跳过，上面会给警告
+    }
+  }
+
+  if (found.length === 0) return null
+  const preferred = found.find((item) => item.version === PREFERRED_PNPM)
+  if (preferred) return preferred
+  return found.sort((a, b) => compareVersions(a.version, b.version))[found.length - 1]
+}
+
+/** 只用于挑"最高的那个版本"，不追求完整 semver。 */
+function compareVersions(a, b) {
+  const part = (value) =>
+    value
+      .replace(/^v/, '')
+      .split(/[.-]/)
+      .map((piece) => Number.parseInt(piece, 10) || 0)
+  const pa = part(a)
+  const pb = part(b)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
 }
 
 /** 找 7za：优先 node_modules/7zip-bin，否则 electron-builder 的缓存目录。 */

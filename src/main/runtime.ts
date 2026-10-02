@@ -52,6 +52,32 @@ function bundledNode(): string | null {
 }
 
 /**
+ * 自带运行时的垫片目录 `<app>/node/bin`（里面是我们放的 `pnpm` 垫片）。
+ *
+ * **必须把它插到子进程 PATH 的最前面**：dsh 的插件管理器调用的是 PATH 上的 `pnpm`
+ * （它自己不带）。不插的话，装插件就取决于"用户机器上碰巧装没装 pnpm" ——
+ * 实测有台新机器因此报 `'pnpm' 不是内部或外部命令`，插件完全装不了。
+ *
+ * 官方桌面端就是这么做的：它的 runtime 里 node 与 pnpm 一起带（versions.json:
+ * node 24.18.1 / pnpm 11.7.0），所以桌面端那条路从来不缺 pnpm。
+ *
+ * 返回 null 表示这个构建没带 pnpm（旧包）—— 调用方按"不改 PATH"处理。
+ */
+export function bundledBinDir(): string | null {
+  const root = app.isPackaged ? process.resourcesPath.replace(/resources[\\/]?$/, '') : app.getAppPath()
+  const dir = join(root, 'node', 'bin')
+  return existsSync(dir) ? dir : null
+}
+
+/** 把自带垫片目录插到 PATH 最前面（这个构建没带 pnpm 就原样返回）。 */
+export function pathWithBundledBin(current: string = process.env['PATH'] ?? ''): string {
+  const bin = bundledBinDir()
+  if (bin === null) return current
+  const separator = process.platform === 'win32' ? ';' : ':'
+  return current === '' ? bin : `${bin}${separator}${current}`
+}
+
+/**
  * 注入给所有 dsh 子进程的 `NODE_OPTIONS`。
  *
  * 放在这里（而不是 runner.ts）是为了让**探测**与**实际注入**用同一个值 —— 两边一飘，探测就白做了。
