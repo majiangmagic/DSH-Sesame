@@ -4,6 +4,7 @@ import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { cmpVer, parseVer } from './registry'
 import { dshHome, profileDir } from './dshHome'
+import { ensureProfileInitialized } from './diagnose'
 import { listInstalled } from './versions'
 import { pathWithBundledBin, requireNode } from './runtime'
 
@@ -160,7 +161,7 @@ function clearStaleLock(onLine: (line: string) => void): void {
   }
 }
 
-function run(args: string[], onLine: (line: string) => void): Promise<{ code: number; tail: string[] }> {
+async function run(args: string[], onLine: (line: string) => void): Promise<{ code: number; tail: string[] }> {
   // 每次写 profile 前先处理残留锁，否则会白等到超时
   clearStaleLock(onLine)
   const tail: string[] = []
@@ -174,6 +175,20 @@ function run(args: string[], onLine: (line: string) => void): Promise<{ code: nu
    * 那类东西在 Electron 的 Node 下正是最容易坏的。两处共用一个运行时，行为才可预期。
    */
   const node = requireNode()
+
+  /*
+   * ★ 先确保 profile 已被 dsh **初始化过**，再 spawn。
+   *
+   * 触发场景（实测）：刚装好一个 dsh 版本、还没手动启动过一次 ——
+   * 此时 `profiles/web` 不存在，而 spawn 的 cwd 指向它 → Node 报 ENOENT，
+   * **并且消息里显示的是命令路径**（`spawn D:\…\node\node.exe ENOENT`），
+   * 看起来像"可执行文件不见了"，于是所有排查都会跑偏。
+   *
+   * 光 mkdir 不够：dsh 要的是完整 profile（package.json / 补丁模板 / 锁文件）。
+   * 所以按"用户手动启动一次"的原样流程初始化：启动 → 等就绪地址 → 自动关掉。
+   */
+  await ensureProfileInitialized(pickDsh().version, PROFILE)
+
   return new Promise((resolve, reject) => {
     const child = spawn(node.path, args, {
       cwd: profileDir(PROFILE),

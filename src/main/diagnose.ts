@@ -24,7 +24,7 @@
  *      本模块优先解析它（比 stdout 更全），拿不到时退回 stdout。
  */
 import { spawn } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DiagnosedProblem, DiagnosisResult } from '@shared/diagnose'
 import { satisfies } from 'semver'
@@ -33,6 +33,7 @@ import { requireNode } from './runtime'
 import { bootArgs, envFor, killTree, READY_RE } from './runner'
 import { desktopLogPath, desktopRuntime, runDesktopCli } from './desktop'
 import { readSettings } from './settings'
+import { decodeChunk } from './textDecode'
 import { versionBin } from './paths'
 
 /** 硬上限：不管怎样都判定失败 */
@@ -409,4 +410,66 @@ export async function diagnoseDesktop(version: string): Promise<DiagnosisResult>
     logPath: logText === '' ? null : desktopLogPath(version),
     rawTail
   }
+}
+
+/**
+ * 确保某个 profile 已经**被 dsh 初始化过**（判断依据：`<DSH_HOME>/profiles/<profile>/package.json` 存在）。
+ * 不存在就**默认启动一次**，等它打印就绪地址后**自动关掉** —— 那一次启动正是 dsh 建立 profile 的时机。
+ *
+ * 为什么必须有这一步：插件安装走的是
+ *     spawn(node, [bin, 'plugin', '--profile', <p>, 'add', …], { cwd: profiles/<p> })
+ * 而那个目录**不存在**时，Node 报的是 `ENOENT`，**并且消息里显示的是命令路径**：
+ *     Error: spawn D:\…\node\node.exe ENOENT
+ * 看起来像"可执行文件不见了"，于是会一路去查安装包、查文件是否缺失 —— 方向完全错了。
+ *
+ * 也**不能只 mkdir**：dsh 要的是完整的 profile（package.json / 补丁模板 / 锁文件），
+ * 空目录照样装不了。所以这里按"用户手动启动一次"的原样流程来初始化。
+ *
+ * @param version 用哪个 dsh 版本来初始化（必须是已装好的）
+ * @param profile 目标 profile，默认 web
+ */
+export async function ensureProfileInitialized(version: string, profile = 'web'): Promise<void> {
+  if (existsSync(join(profileDir(profile), 'package.json'))) return
+
+  const bin = versionBin(version)
+  if (!existsSync(bin)) throw new Error(`初始化 profile 失败：${version} 未安装或缺少入口`)
+  const node = requireNode()
+  const home = dshHome()
+  mkdirSync(home, { recursive: true })
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(node.path, [bin, ...bootArgs(profile, readSettings().port)], {
+      cwd: home,
+      env: { ...envFor(version, node, profile), NO_COLOR: '1', CI: 'true' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    })
+
+    let settled = false
+    let buffer = ''
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      // 就绪即关：初始化已经完成，不需要让它继续跑（killTree 收的是 PID）
+      if (typeof child.pid === 'number') killTree(child.pid)
+      if (error) reject(error)
+      else resolve()
+    }
+    const onData = (chunk: Buffer): void => {
+      buffer += decodeChunk(chunk)
+      if (READY_RE.test(buffer)) finish()
+    }
+    const timer = setTimeout(
+      () => finish(new Error(`初始化 profile「${profile}」超时：${version} 启动了一次但没等到就绪地址`)),
+      90_000
+    )
+
+    child.stdout?.on('data', onData)
+    child.stderr?.on('data', onData)
+    child.on('error', (err) => finish(err))
+    child.on('close', (code) =>
+      finish(code === 0 ? undefined : new Error(`初始化 profile「${profile}」失败（退出码 ${code}）`))
+    )
+  })
 }
