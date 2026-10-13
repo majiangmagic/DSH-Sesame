@@ -1,5 +1,11 @@
 {
-  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"],
+  "include": [
+    "electron.vite.config.ts",
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "src/utils/**/*"
+  ],
   "compilerOptions": {
     "composite": true,
     "target": "ES2022",
@@ -16,7 +22,8 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
-      "@shared/*": ["./src/shared/*"]
+      "@shared/*": ["./src/shared/*"],
+      "@utils/*": ["./src/utils/*"]
     }
   }
 }

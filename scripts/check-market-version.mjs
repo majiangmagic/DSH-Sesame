@@ -4,8 +4,11 @@
  * 用法：node scripts/check-market-version.mjs
  *
  * 为什么需要它：我们把 dshmarket 当库用，依赖的是它**没有稳定性承诺**的内部模块
- * （见 docs/market-dependency.md）。市场升级后如果改了导出，相关功能必须降级 ——
- * 这个脚本就是那个提醒。
+ * （为什么走这条路、风险是什么，见 src/main/domain/plugins/README.md 的"市场"一节）。
+ * 市场升级后如果改了导出，相关功能必须降级 —— 这个脚本就是那个提醒。
+ *
+ * 它只探测"11 个内部导出还在不在"。**函数在、但返回结构变了**同样会让启动器读到空数据，
+ * 那种坏法它看不出来 —— 用 `npm run smoke:market` 补上那一层（真调一次并断言字段）。
  *
  * 它不开 Electron，直接在 Node 里载入，所以能在 CI 里跑。
  */
@@ -18,7 +21,7 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const require_ = createRequire(import.meta.url)
 
-/** 与 src/main/market.ts 的 REQUIRED 表保持一致 —— 改那边记得改这里 */
+/** 与 src/main/domain/plugins/market.ts 的 REQUIRED 表保持一致 —— 改那边记得改这里 */
 const REQUIRED = {
   profile: ['profileDir', 'readManifestDeps', 'readInstalled', 'readProfileBundles'],
   registry: ['loadRegistry'],
@@ -73,7 +76,8 @@ console.log(`  可用 ${ok.length} 项，缺失 ${missing.length} 项`)
 if (missing.length > 0) {
   console.log('\n  ✗ 缺失的导出（市场改了内部 API，对应功能必须降级）：')
   for (const item of missing) console.log(`      ${item}`)
-  console.log('\n  处理：读 docs/market-dependency.md，改 src/main/market.ts 的 REQUIRED 表与调用点。')
+  console.log('\n  处理：改 src/main/domain/plugins/market.ts 的 REQUIRED 表与调用点'
+    + '（风险与降级策略见 src/main/domain/plugins/README.md）。')
 } else {
   console.log('  ✓ 我们依赖的内部 API 全部存在')
 }
@@ -115,7 +119,7 @@ if (market.version && market.version !== installed) {
   console.log(`\n  → 建议更新：npm install --save-exact dshmarket@${market.version}`)
 } else if (raw.version && raw.version !== installed && !market.version) {
   console.log(`\n  → 注册表已有 ${raw.version}，但市场认为发布太新（24 小时冷却），暂不作为更新目标。`)
-  console.log(`    这是市场的供应链策略，启动器应遵循它（见 docs/market-dependency.md）。`)
+  console.log(`    这是市场的供应链策略，启动器应遵循它（见 src/main/domain/plugins/README.md）。`)
 } else if (raw.version === installed) {
   console.log('\n  → 已是最新')
 } else {

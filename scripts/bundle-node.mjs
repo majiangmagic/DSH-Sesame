@@ -1,7 +1,7 @@
 /**
  * 把当前这个 node.exe 复制到 node-bundle/node/，供 electron-builder 的 extraFiles 打进包。
  *
- * 落点是 <安装目录>/node/node.exe —— 正是 src/main/runtime.ts 的第三条解析路径
+ * 落点是 <安装目录>/node/node.exe —— 正是 src/main/infrastructure/runtime.ts 的第三条解析路径
  * （`join(root, 'node', 'node.exe')`，kind: 'bundled'）。放进去就自动生效，不用改运行时代码。
  *
  * 为什么复制"当前运行的这个 node"而不是去找系统的：

@@ -23,22 +23,30 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: {
-      alias: { '@shared': resolve(root, 'src/shared') }
+      alias: {
+        '@shared': resolve(root, 'src/shared'),
+        '@utils': resolve(root, 'src/utils')
+      }
     },
     build: { outDir: 'compiled/main' }
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     resolve: {
-      alias: { '@shared': resolve(root, 'src/shared') }
+      alias: {
+        '@shared': resolve(root, 'src/shared'),
+        '@utils': resolve(root, 'src/utils')
+      }
     },
     build: { outDir: 'compiled/preload' }
   },
   renderer: {
     resolve: {
       alias: {
-        '@': resolve(root, 'src/renderer/src'),
-        '@shared': resolve(root, 'src/shared')
+        // 渲染层的根就是 src/renderer（Vite 的 root 也是它），不再多套一层 src
+        '@': resolve(root, 'src/renderer'),
+        '@shared': resolve(root, 'src/shared'),
+        '@utils': resolve(root, 'src/utils')
       }
     },
     plugins: [vue()],

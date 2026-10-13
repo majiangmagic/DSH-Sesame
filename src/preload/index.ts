@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DiagnosisResult } from '@shared/diagnose'
-import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/snapshot'
+import type { DiagnosisResult } from '@shared/types/control'
+import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/types/snapshots'
+import type { LauncherSettingsPayload } from '@shared/types/settings'
 import {
   DESKTOP_CHANNELS,
   LOG_CHANNELS,
@@ -10,15 +11,18 @@ import {
   VERSION_CHANNELS,
   DIAGNOSE_CHANNELS,
   SNAPSHOT_CHANNELS,
-  WINDOW_CHANNELS,
-  type DesktopProgressEvent,
-  type LauncherSettingsPayload,
-  type PluginProgressEvent,
-  type VersionProgressEvent
-} from '@shared/ipc'
-import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/market'
-import type { PluginList } from '@shared/plugins'
-import type { InstalledVersion, VersionOverview } from '@shared/versions'
+  UPDATE_CHANNELS,
+  WINDOW_CHANNELS
+} from '@shared/constants/channels'
+import type {
+  DesktopProgressEvent,
+  PluginProgressEvent,
+  VersionProgressEvent
+} from '@shared/types/events'
+import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/types/plugins'
+import type { PluginList } from '@shared/types/plugins'
+import type { InstalledVersion, VersionOverview } from '@shared/types/versions'
+import type { LauncherUpdateInfo, LauncherUpdateProgressEvent } from '@shared/types/update'
 
 /** 启动返回的运行态（与 shared 里的 InstalledVersion 同源，只取运行相关字段） */
 type RunningStatePayload = Pick<InstalledVersion, 'version' | 'status' | 'url'>
@@ -26,7 +30,7 @@ type RunningStatePayload = Pick<InstalledVersion, 'version' | 'status' | 'url'>
 /**
  * 暴露给渲染层的能力面。
  *
- * 渲染层**只能**通过 `src/renderer/src/api` 使用这些能力，不要在组件里直接调 ——
+ * 渲染层**只能**通过 `src/renderer/api` 使用这些能力，不要在组件里直接调 ——
  * 这样将来把某个能力从 IPC 换成别的实现时，组件不用改。
  */
 const api = {
@@ -179,6 +183,34 @@ const api = {
      * **会真的起 dsh**（用完即停），所以由用户显式点按钮触发。
      */
     run: (version: string): Promise<DiagnosisResult> => ipcRenderer.invoke(DIAGNOSE_CHANNELS.run, version)
+  },
+
+  /**
+   * **启动器自己**的更新（设置页的按钮）。
+   *
+   * 与 `versions` 那组是两件不同的事：那组管 **dsh 的版本池**（可并存、可切换），
+   * 这组管**启动器这个安装包自己**（就地覆盖升级）。
+   */
+  launcherUpdate: {
+    /** 只查不装。失败也会 resolve（`error` 字段带原因），不抛 —— 设置页打开时就会调它 */
+    check: (): Promise<LauncherUpdateInfo> => ipcRenderer.invoke(UPDATE_CHANNELS.check),
+
+    /**
+     * 下载 → 校验 → 静默安装 → 退出（安装器负责重启）。
+     *
+     * **成功时这个 Promise 不会 resolve** —— 应用会退出。
+     * 失败会 reject，消息里带原因。
+     */
+    install: (): Promise<void> => ipcRenderer.invoke(UPDATE_CHANNELS.install),
+
+    /** 订阅下载/校验/安装进度，返回取消订阅函数 */
+    onProgress: (listener: (event: LauncherUpdateProgressEvent) => void): (() => void) => {
+      const handler = (_event: unknown, payload: LauncherUpdateProgressEvent): void => listener(payload)
+      ipcRenderer.on(UPDATE_CHANNELS.progress, handler)
+      return () => {
+        ipcRenderer.off(UPDATE_CHANNELS.progress, handler)
+      }
+    }
   },
 
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke(WINDOW_CHANNELS.openExternal, url)

@@ -13,9 +13,13 @@
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:market": "node scripts/check-market-version.mjs",
+    "smoke:market": "node scripts/smoke-market.mjs",
+    "check:graph": "node scripts/check-import-graph.mjs",
+    "check:mirror": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-desktop-mirror.mjs",
+    "check:update": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-update.mjs",
     "bundle:node": "node scripts/bundle-node.mjs",
-    "pack": "npm run typecheck && npm run build && electron-builder --dir",
-    "dist": "npm run typecheck && npm run build && electron-builder",
+    "pack": "npm run typecheck && npm run check:graph && npm run build && electron-builder --dir",
+    "dist": "npm run typecheck && npm run check:graph && npm run build && electron-builder",
     "release": "node scripts/bundle-node.mjs && npm run dist && node scripts/publish-release.mjs"
   },
   "devDependencies": {
@@ -36,7 +40,7 @@
     "electron-winstaller@5.4.0": true
   },
   "dependencies": {
-    "dshmarket": "1.58.0",
+    "dshmarket": "1.66.20",
     "pinia": "^4.0.3",
     "semver": "^7.8.5",
     "vue": "^3.5.43",

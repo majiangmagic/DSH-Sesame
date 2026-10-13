@@ -1,4 +1,4 @@
-﻿# DSH-Sesame
+# DSH-Sesame
 
 dsh 的桌面启动器 —— 用 Electron + Vue 3 + TypeScript 写的图形界面，把 dsh 的命令行操作收进一个窗口。
 
@@ -17,9 +17,10 @@ dsh 的桌面启动器 —— 用 Electron + Vue 3 + TypeScript 写的图形界�
 3. 回「控制」页点启动，就绪后点开那个地址
 
 **关于 Node**：安装包里**自带**一份 Node 作为兜底，所以目标机器上没装 Node 也能跑。
-若系统里已有 Node，启动器优先用系统的那个（解析顺序：`DSH_NODE` 环境变量 → PATH → 包内自带）。
-必须用真正的 `node.exe`：dsh 的加载器不接受 Electron 自带的 V8，原因见 `src/main/runtime.ts`。
+若系统里已有 Node，启动器优先用系统的那个（解析顺序：`SESAME_NODE` 环境变量 → PATH → 包内自带）。
+必须用真正的 `node.exe`：dsh 的加载器不接受 Electron 自带的 V8，原因见 `src/main/infrastructure/runtime.ts`。
 
 ## 开发
 
 构建命令、环境上的坑与架构约定见 [DEVELOPING.md](DEVELOPING.md)。
+**目录怎么分、每个目录管什么，见 [src/README.md](src/README.md)** —— 每个目录下都有一份 README。
