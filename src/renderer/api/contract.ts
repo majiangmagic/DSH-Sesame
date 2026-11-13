@@ -95,7 +95,13 @@ export interface ManagerApi {
   /** 真实：安装根目录 + 已装版本 + 远端版本表 */
   getVersionOverview(): Promise<VersionOverview>
 
-  /** 真实：读 profile 的已装插件（主进程照实回全量，渲染层过滤掉官方组件） */
+  /**
+   * 真实：读 profile 的已装插件（主进程照实回全量，渲染层过滤掉官方组件）。
+   *
+   * **只回第三方插件**：`@deepseek-ai/*` 是官方运行时，不是"用户装的插件"，而且一律不可开关。
+   */
+  getPlugins(): Promise<PluginList>
+
   /**
    * 限时启动一次当前版本并解析 dsh 自己的失败诊断，返回**有问题的插件**。
    * 会真的起 dsh（用完即停）。
@@ -114,8 +120,6 @@ export interface ManagerApi {
   deleteSnapshot(id: string): Promise<boolean>
   /** 快照：存之前的预演（弹窗里那两份列表） */
   snapshotPlan(): Promise<SnapshotPreview>
-
-  getPlugins(): Promise<PluginList>
 
   /** 读启动器设置（存 `<userData>/settings.json`，读失败退回默认值） */
   getSettings(): Promise<SettingsPayload>

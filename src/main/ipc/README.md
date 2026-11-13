@@ -1,4 +1,4 @@
-# main/ipc
+﻿# main/ipc
 
 **IPC 通信注册与处理。** 全部通道的注册都集中在这个目录 ——
 主进程里唯一"知道所有通道"的地方。
@@ -37,6 +37,6 @@
 ## window.ts 为什么是个例外
 
 它不对应任何标签页 —— 服务的是窗口本身（最小化/最大化/关闭/选目录/开外链）。
-放在这里而不是 `infrastructure/window.ts`，是为了守住分工：
-`infrastructure` 管窗口怎么建、怎么显示；`ipc` 管它怎么被渲染层调用。
-窗口实例从 `currentWindow()` 取（单例，状态在 infrastructure 那边）。
+放在这里而不是 `platform/window.ts`，是为了守住分工：
+`platform` 管窗口怎么建、怎么显示；`ipc` 管它怎么被渲染层调用。
+窗口实例从 `currentWindow()` 取（单例，状态在 platform 那边）。

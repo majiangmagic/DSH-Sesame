@@ -1,15 +1,15 @@
-import { dialog, ipcMain, shell } from 'electron'
+﻿import { dialog, ipcMain, shell } from 'electron'
 import { WINDOW_CHANNELS } from '@shared/constants/channels'
-import { currentWindow, isSafeExternal } from '../infrastructure/window'
+import { currentWindow, isSafeExternal } from '../platform/window'
 
 /**
  * 窗口壳的 IPC：最小化 / 最大化 / 关闭 / 取最大化状态 / 选目录 / 开外链。
  *
  * 这是 `main/ipc/` 里**唯一不对应标签页**的文件 —— 它服务的是窗口本身，
- * 不是某个业务领域。放在这里而不是 `infrastructure/window.ts`，是为了守住那条分工：
- *   `infrastructure/` 管窗口怎么建、怎么显示；`ipc/` 管它怎么被渲染层调用。
+ * 不是某个业务领域。放在这里而不是 `platform/window.ts`，是为了守住那条分工：
+ *   `platform/` 管窗口怎么建、怎么显示；`ipc/` 管它怎么被渲染层调用。
  *
- * 窗口实例从 `currentWindow()` 取（单例，状态在 infrastructure 那边），
+ * 窗口实例从 `currentWindow()` 取（单例，状态在 platform 那边），
  * 所以这里不需要再串一个 `getWindow` 参数。
  */
 export function registerWindowIpc(): void {

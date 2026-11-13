@@ -105,9 +105,35 @@ function compact(value: number): string {
   return String(value)
 }
 
-/** 安装命令直接来自目录，比我们自己拼更可靠 */
+/**
+ * 安装命令的提示文案。
+ *
+ * 优先用目录给的 `install`（作者自带的那行命令）；目录没给时，用**与按钮实际执行同一份**
+ * 解析结果拼 —— 两者同源于 `installTargetOf`，不会出现"标题写 A、实际装 B"。
+ */
 function installCommand(plugin: MarketPlugin): string {
-  return plugin.install || `dsh plugin --profile web add ${identityOf(plugin)}`
+  if (plugin.install) return plugin.install
+  const target = market.installTargetOf(plugin)
+  return target === null ? '' : `dsh plugin --profile web add ${target.target}`
+}
+
+/** 卸载命令的提示文案：卸载要用**真实的依赖名**，不是目录短名 */
+function uninstallCommand(plugin: MarketPlugin): string {
+  const target = market.installTargetOf(plugin)
+  const name = target !== null && target.kind === 'npm' ? target.target : plugin.npm || plugin.name
+  return `dsh plugin --profile web remove ${name}`
+}
+
+/**
+ * 行上显示的版本号。
+ *
+ * 优先目录给的（npm 条目都有）；只有 GitHub 的条目目录不给版本，退回**已装版本** ——
+ * 否则装完之后那一行连版本都没有，看起来像没装好。
+ */
+function displayVersion(plugin: MarketPlugin): string {
+  const fromCatalog = String(plugin.version ?? '').trim()
+  if (fromCatalog !== '') return fromCatalog
+  return market.installedVersionOf(plugin)
 }
 
 onMounted(() => {
@@ -198,7 +224,7 @@ onMounted(() => {
       <div
         v-else-if="market.progressText"
         class="market-banner"
-        :class="{ 'is-busy': market.busyName !== null }"
+        :class="{ 'is-busy': market.anyBusy }"
       >
         {{ market.progressText }}
       </div>
@@ -212,7 +238,7 @@ onMounted(() => {
         <div
           v-for="plugin in market.visible"
           v-else
-          :key="identityOf(plugin) + plugin.owner"
+          :key="identityOf(plugin) || `${plugin.name}@${plugin.owner}@${plugin.url}`"
           class="market-row"
           :data-plugin="plugin.name"
           :data-identity="identityOf(plugin)"
@@ -234,7 +260,7 @@ onMounted(() => {
           <div class="market-main">
             <div class="market-name">
               <span class="market-pkg">{{ plugin.name }}</span>
-              <span v-if="plugin.version" class="market-version">v{{ plugin.version }}</span>
+              <span v-if="displayVersion(plugin)" class="market-version">v{{ displayVersion(plugin) }}</span>
               <span v-if="market.isInstalled(plugin)" class="tag muted">{{ t('status.installed') }}</span>
               <span v-if="market.sameIdentityCount(plugin) > 1" class="tag muted" :title="t('market.sameNameHint')">
                 {{ t('market.sameName', { count: market.sameIdentityCount(plugin) }) }}
@@ -275,52 +301,55 @@ onMounted(() => {
               装了但市场里版本更新 → 先给「更新到 x.y.z」。
               目标版本由 store 的 updateTarget() 判定（只认两边都能比的情况），
               这里不自己算。更新与卸载可以并存：想升就升，想撤就撤。
+              只有 npm 来源有版本语义，git / tarball 条目 updateTarget 恒为空串。
             -->
             <button
               v-if="market.updateTarget(plugin)"
               class="subtle-button"
               type="button"
-              :disabled="market.busyName === identityOf(plugin)"
+              :disabled="market.busyFor(plugin)"
               :title="t('market.updateTitle', { version: market.updateTarget(plugin) })"
               @click="market.update(identityOf(plugin), market.updateTarget(plugin))"
             >
               {{
-                market.busyName === identityOf(plugin)
+                market.busyFor(plugin)
                   ? t('market.updating')
                   : `${t('market.update')} ${market.updateTarget(plugin)}`
               }}
             </button>
 
-            <!-- 已装 → 卸载；未装 → 下载。入参一律是真 npm 包名（identityOf） -->
+            <!-- 已装 → 卸载；未装 → 下载。两个按钮都接**目录条目本身**，由 store 解析真实目标 -->
             <button
               v-if="market.isInstalled(plugin)"
               class="subtle-button danger"
               type="button"
-              :disabled="market.busyName === identityOf(plugin)"
-              :title="t('market.uninstallTitle', { command: `dsh plugin --profile web remove ${identityOf(plugin)}` })"
-              @click="market.uninstall(identityOf(plugin))"
+              :disabled="market.busyFor(plugin)"
+              :title="t('market.uninstallTitle', { command: uninstallCommand(plugin) })"
+              @click="market.uninstall(plugin)"
             >
               {{
-                market.busyName === identityOf(plugin) ? t('market.uninstalling') : t('market.uninstall')
+                market.busyFor(plugin) ? t('market.uninstalling') : t('market.uninstall')
               }}
             </button>
             <!--
-              npm 字段为空的条目不给出下载入口：安装入参要用**真 npm 包名**，
-              退回短名会装上同名的另一个包（目录里确有这种记录，例如 4 个 dsh-pet 里有两个 npm 为空）。
+              下载入口的判据是「有没有安装目标」，不是「有没有 npm 名」。
+              只有 GitHub 的条目走 github:owner/repo（或作者的同仓库 Release 产物），
+              与 dsh 自己的市场同一套三段式；没有仓库也没有 npm 名的才禁用。
+              只有**这一行自己**在忙时禁用，别的行照常可点（点击会排队）。
             -->
             <button
               v-else
               class="subtle-button"
               type="button"
-              :disabled="market.busyName === identityOf(plugin) || market.noNpmName(plugin)"
+              :disabled="market.busyFor(plugin) || !market.installable(plugin)"
               :title="
-                market.noNpmName(plugin)
-                  ? t('market.noNpmHint')
-                  : t('market.installTitle', { command: installCommand(plugin) })
+                market.installable(plugin)
+                  ? t('market.installTitle', { command: installCommand(plugin) })
+                  : t('market.noSourceHint')
               "
-              @click="market.install(identityOf(plugin))"
+              @click="market.install(plugin)"
             >
-              {{ market.busyName === identityOf(plugin) ? t('market.installing') : t('market.install') }}
+              {{ market.busyFor(plugin) ? t('market.installing') : t('market.install') }}
             </button>
           </div>
         </div>

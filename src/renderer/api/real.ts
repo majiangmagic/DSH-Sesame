@@ -21,7 +21,7 @@ import type {
  *  - 插件：走 IPC 到主进程，真读写真 profile 的 `cordis.patch.yml`；安装/卸载走
  *    dsh 自己的 `plugin` 命令（→ pnpm），不自己 npm install；
  *  - 终端：走 IPC，读主进程日志环形缓冲（dsh 子进程输出 + 操作事件）并实时订阅；
- *  - **设置仍是样例数据**（只改内存、重启即丢），界面上应挂「样例数据」标注。
+ *  - 设置：走 IPC，真读写 `<userData>/settings.json`。
  */
 export const realApi: ManagerApi = {
   getVersionOverview: (): Promise<VersionOverview> => window.sesame.versions.overview(),

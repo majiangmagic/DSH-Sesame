@@ -58,7 +58,7 @@ onMounted(() => {
       v-for="plugin in store.plugins"
       :key="plugin.name"
       :plugin="plugin"
-      :busy="store.toggling === plugin.name"
+      :busy="store.isToggling(plugin.name)"
       @toggle="store.setEnabled"
     />
   </div>

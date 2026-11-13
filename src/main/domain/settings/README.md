@@ -1,4 +1,4 @@
-# main/domain/settings
+﻿# main/domain/settings
 
 **设置页**（标签页「设置」，`/settings`）的写入策略，以及**启动器自己的更新**。
 
@@ -9,7 +9,7 @@
 | `updateMeta.ts` | `latest.yml` 解析 + 仓库坐标识别（**纯函数，不依赖 Electron**） |
 
 IPC 在 [../../ipc/settings.ts](../../ipc/settings.ts)。
-**设置的原始读写不在这里**，在 [../../infrastructure/settings.ts](../../infrastructure/settings.ts)。
+**设置的原始读写不在这里**，在 [../../platform/settings.ts](../../platform/settings.ts)。
 
 ## 启动器自己的更新
 
@@ -65,17 +65,17 @@ IPC 在 [../../ipc/settings.ts](../../ipc/settings.ts)。
 为一个元数据字段去动发布链路不划算。
 读取逻辑仍然留着（`repoSlugFrom`）：谁哪天有意加了 `repository`，这里会自动认出来。
 
-## 为什么设置的原始读写留在 infrastructure
+## 为什么设置的原始读写留在 platform
 
-不是"懒得搬"。`infrastructure/paths.ts` 与 `infrastructure/dshHome.ts` 都是
+不是"懒得搬"。`platform/paths.ts` 与 `platform/dshHome.ts` 都是
 文件系统层却要读设置（版本池位置、DSH_HOME）。设置一旦搬进 domain，
-这两处就变成 **infrastructure → domain 的反向依赖**，而那一层是不许依赖 domain 的。
+这两处就变成 **platform → domain 的反向依赖**，而那一层是不许依赖 domain 的。
 
-所以界线是：**机制留 infrastructure，策略放 domain。**
+所以界线是：**机制留 platform，策略放 domain。**
 
 | 关注点 | 住在哪 |
 | --- | --- |
-| JSON 文件读写、默认值、开机自启落注册表 | `infrastructure/settings.ts` |
+| JSON 文件读写、默认值、开机自启落注册表 | `platform/settings.ts` |
 | "来自渲染层的载荷该不该收"（逐字段校验） | [../../shared/schemas/settings.ts](../../shared/schemas/settings.ts) |
 | "收下之后怎么落盘、要不要记日志" | 这里的 `apply.ts` |
 | 通道 | `ipc/settings.ts` |

@@ -1,4 +1,4 @@
-# main/domain/terminal
+﻿# main/domain/terminal
 
 **终端页**（标签页「终端」，`/terminal`）的数据 —— 日志环形缓冲。
 
@@ -8,7 +8,7 @@
 
 IPC 在 [../../ipc/terminal.ts](../../ipc/terminal.ts)（`log:get` / `log:clear`）。
 
-## 为什么缓冲在 domain 而不是 infrastructure
+## 为什么缓冲在 domain 而不是 platform
 
 它是**终端页这个领域的数据**，不是通用机制 —— 早先放在 `infra/logbus.ts`，
 结果 `domain/terminal/` 空得只剩一个 ipc 文件，"domain = 标签页"这条规则名存实亡。

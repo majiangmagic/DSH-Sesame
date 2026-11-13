@@ -1,7 +1,7 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { MARKET_CHANNELS, PLUGIN_CHANNELS } from '@shared/constants/channels'
 import type { PluginProgressEvent } from '@shared/types/events'
-import { profileDir } from '../infrastructure/dshHome'
+import { profileDir } from '../platform/dshHome'
 import { pushTagged } from '../domain/terminal/logbus'
 import {
   assessProfile,
@@ -13,6 +13,7 @@ import {
 } from '../domain/plugins/market'
 import { installPlugin, uninstallPlugin, updatePlugin } from '../domain/plugins/pluginInstall'
 import { listPlugins, setPluginEnabled } from '../domain/plugins/pluginState'
+import { withPluginWriteLock } from '../domain/plugins/serialize'
 // "改 profile 前先自动存档"是一条业务规则，住在 domain 里（见那个文件的注释）
 import { autoSnapshotBefore } from '../domain/plugins/guard'
 
@@ -29,11 +30,23 @@ export function registerPluginsIpc(): void {
   ipcMain.handle(
     PLUGIN_CHANNELS.setEnabled,
     async (_event: IpcMainInvokeEvent, packageName: string, enabled: boolean) => {
-      await autoSnapshotBefore((enabled ? '开启' : '关闭') + '插件 ' + packageName)
       if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
       if (typeof enabled !== 'boolean') throw new Error('缺少开关目标状态')
+      /*
+       * **开关插件不存快照。**
+       *
+       * 原来这里调 `autoSnapshotBefore`，理由是"改 profile 前留退路"。但开关改的只有
+       * `cordis.patch.yml` 里的一行，而快照会把整个 `node_modules` 打成 tgz ——
+       * 实测一份约 175 MB、tar 跑 20 秒。用户真实目录里两条相隔 58 秒的"开启/关闭"
+       * 各占 180 MB（共 361 MB），换来的"还原点"不过是一次点击就能复原的状态。
+       *
+       * 更要紧的是 `SNAPSHOT_KEEP = 10`：开关十次就把升级前的有效还原点全挤掉，
+       * 留存策略被廉价操作占满。所以这里只留一行终端日志做审计，不打快照。
+       *
+       * 安装 / 升级 / 卸载**仍然**存快照 —— 那三个真会动 `node_modules`，不可一键复原。
+       */
+      pushTagged('启动器', `${enabled ? '开启' : '关闭'}插件 ${packageName}`)
       const dir = profileDir()
-      setPluginEnabled(dir, packageName, enabled)
 
       /*
        * **不在这里写桌面端。** 只改 web —— 桌面端的那份由 `syncWebToDesktop` 在**启动前对齐**
@@ -44,34 +57,66 @@ export function registerPluginsIpc(): void {
        * 同步就只需要**一个入口点**（启动前），语义也更干净：web 是唯一基准，桌面端照着对齐。
        *
        * 代价（已知并接受）：桌面端**正在跑**时切开关，要下次启动桌面端才生效。
+       *
+       * `withPluginWriteLock`：`setPluginEnabled` 是"读 yml → 改 → 写回"，
+       * 两个开关同时进来会丢更新（后写的用旧文本覆盖）。排进串行队列即可，**不再丢弃**点击。
        */
-      return listPlugins(dir)
+      return withPluginWriteLock(() => {
+        setPluginEnabled(dir, packageName, enabled)
+        return listPlugins(dir)
+      })
     }
   )
 
   // --- 插件安装 / 卸载（走 dsh 自己的 plugin 命令 → pnpm）---
 
-  /** 进度推回发起操作的那个窗口，不广播（多窗口时另一个窗口不该看到别人的安装） */
+  /**
+   * 进度推回发起操作的那个窗口，不广播（多窗口时另一个窗口不该看到别人的安装）。
+   *
+   * **同时写进终端页的日志缓冲**：pnpm 的每一行输出都是排查依据（依赖冲突、构建脚本失败、
+   * 发布年龄被挡…）。之前这些行只出现在插件页那一小块进度文案里，装完就没了 ——
+   * 终端页只剩"安装插件 X / X 安装完成"两行，等于什么都没留下。
+   */
   const pluginProgress = (event: IpcMainInvokeEvent, packageName: string) => {
     return (progress: { phase: PluginProgressEvent['phase']; text: string }): void => {
+      pushTagged(`pnpm ${packageName}`, progress.text)
       const payload: PluginProgressEvent = { packageName, ...progress }
       if (!event.sender.isDestroyed()) event.sender.send(PLUGIN_CHANNELS.progress, payload)
+    }
+  }
+
+  /**
+   * 排进串行队列，并把失败原因也写进终端页。
+   *
+   * 失败以前只 reject 给界面弹一句，终端页不留痕 —— 而真正需要事后翻看的恰恰是失败。
+   */
+  const runLogged = async (label: string, job: () => Promise<void>): Promise<void> => {
+    try {
+      await withPluginWriteLock(job)
+    } catch (cause) {
+      pushTagged('启动器', `${label}失败：` + (cause instanceof Error ? cause.message : String(cause)))
+      throw cause
     }
   }
 
   ipcMain.handle(PLUGIN_CHANNELS.install, async (event: IpcMainInvokeEvent, packageName: string) => {
     if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
     pushTagged('启动器', `安装插件 ${packageName}`)
-    await autoSnapshotBefore('安装插件 ' + packageName)
-    await installPlugin(packageName, pluginProgress(event, packageName))
+    // 装 / 卸 / 更都动 `package.json` 与 `node_modules`，必须排进同一个串行队列
+    await runLogged(`安装 ${packageName} `, async () => {
+      await autoSnapshotBefore('安装插件 ' + packageName)
+      await installPlugin(packageName, pluginProgress(event, packageName))
+    })
     pushTagged('启动器', `${packageName} 安装完成`)
   })
 
   ipcMain.handle(PLUGIN_CHANNELS.uninstall, async (event: IpcMainInvokeEvent, packageName: string) => {
     if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
     pushTagged('启动器', `卸载插件 ${packageName}`)
-    await autoSnapshotBefore('卸载插件 ' + packageName)
-    await uninstallPlugin(packageName, pluginProgress(event, packageName))
+    await runLogged(`卸载 ${packageName} `, async () => {
+      await autoSnapshotBefore('卸载插件 ' + packageName)
+      await uninstallPlugin(packageName, pluginProgress(event, packageName))
+    })
     pushTagged('启动器', `${packageName} 已卸载`)
   })
 
@@ -84,8 +129,10 @@ export function registerPluginsIpc(): void {
       if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
       if (typeof target !== 'string' || target === '') throw new Error('缺少目标版本')
       pushTagged('启动器', `更新插件 ${packageName} → ${target}`)
-      await autoSnapshotBefore('升级插件 ' + packageName)
-      await updatePlugin(packageName, target, pluginProgress(event, packageName))
+      await runLogged(`更新 ${packageName} `, async () => {
+        await autoSnapshotBefore('升级插件 ' + packageName)
+        await updatePlugin(packageName, target, pluginProgress(event, packageName))
+      })
       pushTagged('启动器', `${packageName} 已更新到 ${target}`)
     }
   )

@@ -1,4 +1,4 @@
-# main/domain
+﻿# main/domain
 
 主进程的**业务层**。目录名严格等于界面上的 6 个标签页：
 
@@ -51,6 +51,6 @@
 注意 `control ↔ plugins` 是**互指**：文件层面无环（`sync.ts → pluginState.ts`，
 `pluginInstall.ts → diagnose.ts` 是两组不同文件），所以模块初始化顺序没问题。
 但这也说明这两个领域的边界不够干净 —— 想彻底拆开，得把
-`control/diagnose.ts` 里"读插件清单"那部分下沉到 infrastructure。
+`control/diagnose.ts` 里"读插件清单"那部分下沉到 platform。
 
 **绝不许成环** —— `npm run check:graph` 会拦。

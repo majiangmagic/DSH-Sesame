@@ -1,9 +1,11 @@
 import { spawn } from 'node:child_process'
-import { decodeChunk } from '../../infrastructure/textDecode'
+import { createStreamDecoder } from '../../platform/textDecode'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { versionBin, versionDir } from '../../infrastructure/paths'
-import { registryUrl } from '../../infrastructure/registry'
+import { versionBin, versionDir } from '../../platform/paths'
+import { registryUrl } from '../../platform/registry'
+import { currentRun } from '../control/runner'
+import { VERSION_RE } from './versions'
 
 /**
  * 版本的安装 / 卸载。
@@ -22,18 +24,14 @@ export interface InstallProgress {
   text: string
 }
 
-/*
- * 当前正在运行的版本。
- *
- * 启动/停止还没实现（下一步），所以这里恒为 null。它的作用是让"卸载"能拒绝删掉正在跑的版本 ——
- * 等启动实现后由那边写入，卸载这条判断不用再改。
+/**
+ * 正在运行的版本。**真实运行态在 `control/runner.ts` 的 `currentRun()` 里**，
+ * 这里不再维护一份会漂移的副本 —— 之前那个 `runningVersion` 变量恒为 null、无人写入，
+ * 导致"运行中不给卸"的守卫永远不触发（dsh 在跑时卸载，会留下半破损的目录）。
  */
-let runningVersion: string | null = null
-export function setRunningVersion(version: string | null): void {
-  runningVersion = version
-}
-export function getRunningVersion(): string | null {
-  return runningVersion
+function isRunning(version: string): boolean {
+  const run = currentRun()
+  return run !== null && run.version === version && run.status === 'running'
 }
 
 /** 在 PATH 里找一个可执行文件（Windows 试 .exe/.cmd/.bat，其它平台试原名）。 */
@@ -86,12 +84,11 @@ function run(
   args: string[],
   options: { cwd: string; onLine: (line: string) => void; tailLines?: number }
 ): Promise<RunResult> {
-  const tail: string[] = []
-  const keep = options.tailLines ?? 40
-  const useShell = command.cli === null
-  const finalArgs = command.cli === null ? args : [command.cli, ...args]
-
   return new Promise((resolve, reject) => {
+    const tail: string[] = []
+    const keep = options.tailLines ?? 40
+    const useShell = command.cli === null
+    const finalArgs = command.cli === null ? args : [command.cli, ...args]
     const child = spawn(command.file, finalArgs, {
       cwd: options.cwd,
       shell: useShell,
@@ -105,11 +102,12 @@ function run(
        */
     })
 
-    let buffer = ''
-    const consume = (chunk: Buffer): void => {
-      buffer += decodeChunk(chunk)
-      const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() ?? ''
+    const decoders = { stdout: createStreamDecoder(), stderr: createStreamDecoder() }
+    const buffers = { stdout: '', stderr: '' }
+    const consume = (which: 'stdout' | 'stderr') => (chunk: Buffer): void => {
+      buffers[which] += decoders[which].decode(chunk)
+      const lines = buffers[which].split(/\r?\n/)
+      buffers[which] = lines.pop() ?? ''
       for (const line of lines) {
         const text = line.replace(/\s+$/, '')
         if (!text) continue
@@ -119,14 +117,15 @@ function run(
       }
     }
 
-    child.stdout?.on('data', consume)
-    child.stderr?.on('data', consume)
+    child.stdout?.on('data', consume('stdout'))
+    child.stderr?.on('data', consume('stderr'))
     child.on('error', reject)
     child.on('close', (code) => {
-      if (buffer.trim()) {
+      const rest = buffers.stdout.trim() !== '' ? buffers.stdout.trim() : buffers.stderr.trim()
+      if (rest !== '') {
         if (tail.length >= keep) tail.shift()
-        tail.push(buffer.trim())
-        options.onLine(buffer.trim())
+        tail.push(rest)
+        options.onLine(rest)
       }
       resolve({ code: code ?? -1, tail })
     })
@@ -156,8 +155,20 @@ function writePrivateManifest(root: string): void {
  */
 export async function installVersion(
   version: string,
-  onProgress: (progress: InstallProgress) => void = () => {}
+  onProgress: (progress: InstallProgress) => void = () => {},
+  /**
+   * 原始输出行（npm 的每一行，未过滤）。
+   *
+   * 与 `onProgress` 分开：进度只挑"已装 N 个包 / 错误"两类给界面看，避免刷屏；
+   * 而终端页需要**全部原始行**才有排查价值 —— 装失败时真正有用的往往是
+   * `npm http fetch` 的 404、或者某个 peer 冲突的 warn。
+   */
+  onLine: (line: string) => void = () => {}
 ): Promise<void> {
+  // 与 versions.ts 扫描端的 VERSION_RE 同源：形状不认就拒绝 —— version 直接拼路径，
+  // "../../x" 会在数据根之外建目录；也挡掉空串与 shell 元字符
+  if (!VERSION_RE.test(version)) throw new Error(`版本号不合法：${version}`)
+
   const npm = resolveNpm()
   if ('error' in npm) throw new Error(npm.error)
 
@@ -182,6 +193,8 @@ export async function installVersion(
     {
       cwd: root,
       onLine: (line) => {
+        // 原始行先交给调用方（终端页要全量），再挑两类给界面进度
+        onLine(line)
         // 只把有价值的两类行报给界面，避免刷屏：包计数与错误
         const added = line.match(/added (\d+) packages?/i)
         if (added) {
@@ -198,6 +211,13 @@ export async function installVersion(
   )
 
   if (result.code !== 0) {
+    // 失败时清掉半成品目录 —— 留下它会让"装好了"的判据（versionBin 存在）永远不成立，
+    // 下次同名安装也只是在废墟上覆盖
+    try {
+      rmSync(root, { recursive: true, force: true })
+    } catch {
+      // 清不掉就算了，至少把真实错误抛出去
+    }
     const detail = result.tail.slice(-8).join('\n')
     throw new Error(`npm 安装 ${version} 失败（退出码 ${result.code}）：\n${detail}`)
   }
@@ -215,7 +235,7 @@ export async function installVersion(
  * 界面可以被绕过，文件系统这一层不能。
  */
 export async function uninstallVersion(version: string): Promise<void> {
-  if (runningVersion === version) {
+  if (isRunning(version)) {
     throw new Error(`${version} 正在运行，不能卸载。请先停止它。`)
   }
   const root = versionDir(version)

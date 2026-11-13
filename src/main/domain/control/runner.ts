@@ -1,15 +1,21 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { decodeChunk } from '../../infrastructure/textDecode'
+import { createStreamDecoder } from '../../platform/textDecode'
 import { existsSync, mkdirSync } from 'node:fs'
 import type { VersionStatus } from '@shared/types/versions'
-import { dshHome, profileDir } from '../../infrastructure/dshHome'
-import { versionBin } from '../../infrastructure/paths'
+import { dshHome, profileDir } from '../../platform/dshHome'
+import { versionBin } from '../../platform/paths'
 import { createServer } from 'node:net'
-import { requireNode } from '../../infrastructure/runtime'
+import { requireNode } from '../../platform/runtime'
 import { pushTagged } from '../terminal/logbus'
-import { readSettings } from '../../infrastructure/settings'
-import { bootArgs, envFor, killTree, READY_RE } from '../../infrastructure/boot'
-import { desktopLogPath, ensureDesktop, launchDesktop, type DesktopProgress } from './desktop'
+import { readSettings } from '../../platform/settings'
+import { bootArgs, envFor, killTree, READY_RE } from '../../platform/boot'
+import {
+  desktopLogPath,
+  ensureDesktop,
+  launchDesktop,
+  tailDesktopLog,
+  type DesktopProgress
+} from './desktop'
 import { repairDesktopPatch, syncWebToDesktop } from './sync'
 
 /**
@@ -58,6 +64,8 @@ interface Proc extends RunState {
   tail: string[]
   exit: { code: number | null; signal: string | null } | null
   startedAt: number
+  /** 等这个实例就绪的等待者（超时/取消时逐个 reject） */
+  startWaiters: Array<(error: Error) => void>
 }
 
 let current: Proc | null = null
@@ -69,7 +77,12 @@ let current: Proc | null = null
  * 同一时刻只该有一个在跑。记着它，`overview()` 才能把那个版本标成「运行中」，
  * 界面上的「停止」也才能真的掐断。
  */
-let desktopProc: { version: string; child: ChildProcess } | null = null
+let desktopProc: {
+  version: string
+  child: ChildProcess
+  /** 停掉「跟随 desktop.log」的定时器（进程退出/被停止时调） */
+  stopTail: () => void
+} | null = null
 
 /** 当前运行态；没有在跑返回 null。`overview()` 用它给已装版本打上 status/url。 */
 export function currentRun(): RunState | null {
@@ -105,7 +118,10 @@ function isPortFree(port: number): Promise<boolean> {
  * 因此回退 + 告知，而不是拒绝服务。
  */
 async function resolvePort(configured: number): Promise<number> {
-  if (!Number.isInteger(configured) || configured < 1024 || configured > 65535) return 0
+  if (!Number.isInteger(configured) || configured < 1024 || configured > 65535) {
+    pushTagged('启动器', `启动端口 ${configured} 不在 1024~65535 范围，改用系统分配的空闲端口。`)
+    return 0
+  }
   if (await isPortFree(configured)) return configured
   pushTagged(
     '启动器',
@@ -123,12 +139,23 @@ function attach(version: string, child: ChildProcess): Proc {
     url: null,
     tail: [],
     exit: null,
-    startedAt: Date.now()
+    startedAt: Date.now(),
+    startWaiters: []
   }
   current = proc
 
-  const onChunk = (buf: Buffer): void => {
-    for (const line of decodeChunk(buf).split(/\r?\n/)) {
+  // stdout 与 stderr **各用一个解码器** —— TextDecoder(stream:true) 的残留状态
+  // 必须按流持有，两路共用一个会把半个字符拼到另一路去（实测乱码就是这么来的）。
+  // 行装配也在这里做：TCP 会分包，就绪行被切成两块时按块 split 会匹配不到 READY_RE，
+  // 之前因此白等满 180s 超时（对照正确写法：desktop.ts 的 consume）。
+  const decoders = { stdout: createStreamDecoder(), stderr: createStreamDecoder() }
+  const buffers = { stdout: '', stderr: '' }
+
+  const onChunk = (which: 'stdout' | 'stderr') => (buf: Buffer): void => {
+    buffers[which] += decoders[which].decode(buf)
+    const parts = buffers[which].split(/\r?\n/)
+    buffers[which] = parts.pop() ?? ''
+    for (const line of parts) {
       if (line.trim() !== '') {
         proc.tail.push(line)
         if (proc.tail.length > TAIL_LIMIT) proc.tail.shift()
@@ -143,8 +170,8 @@ function attach(version: string, child: ChildProcess): Proc {
       }
     }
   }
-  child.stdout?.on('data', onChunk)
-  child.stderr?.on('data', onChunk)
+  child.stdout?.on('data', onChunk('stdout'))
+  child.stderr?.on('data', onChunk('stderr'))
 
   child.on('error', (error) => {
     proc.tail.push(`进程错误：${error.message}`)
@@ -162,15 +189,21 @@ function attach(version: string, child: ChildProcess): Proc {
   return proc
 }
 
-/** 等就绪：轮询状态，超时则杀树并抛出带输出尾巴的错误 */
+/** 等就绪：轮询状态，超时则杀树、清状态，并抛出带输出尾巴的错误。 */
 function waitUntilReady(proc: Proc): Promise<RunState> {
   return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      const idx = proc.startWaiters.indexOf(reject)
+      if (idx !== -1) proc.startWaiters.splice(idx, 1)
+    }
     const tick = (): void => {
       if (current !== proc && proc.status !== 'running') {
+        cleanup()
         reject(new Error(`${proc.version} 启动失败：进程已退出\n${proc.tail.slice(-15).join('\n')}`))
         return
       }
       if (proc.status === 'running') {
+        cleanup()
         if (proc.url === null) {
           reject(new Error(`${proc.version} 报告就绪但没给出地址`))
           return
@@ -180,6 +213,11 @@ function waitUntilReady(proc: Proc): Promise<RunState> {
       }
       if (Date.now() - proc.startedAt > START_TIMEOUT_MS) {
         killTree(proc.child.pid)
+        // 之前这里不清状态：超时后 `status` 仍是 'starting'，`current` 仍指向它 ——
+        // 再点启动会命中 `status === 'starting'` 又等一个 180s。现在彻底清掉。
+        if (current === proc) current = null
+        cancelWaiters(proc)
+        pushTagged('启动器', `${proc.version} 启动超时（${Math.round(START_TIMEOUT_MS / 1000)}s），已终止该进程`)
         reject(
           new Error(
             `${proc.version} 启动超时（${Math.round(START_TIMEOUT_MS / 1000)}s）\n${proc.tail.slice(-15).join('\n')}`
@@ -189,6 +227,7 @@ function waitUntilReady(proc: Proc): Promise<RunState> {
       }
       setTimeout(tick, 200)
     }
+    proc.startWaiters.push(reject)
     tick()
   })
 }
@@ -198,6 +237,7 @@ export async function stopDesktop(): Promise<void> {
   const proc = desktopProc
   if (proc === null) return
   desktopProc = null
+  proc.stopTail()
   killTree(proc.child.pid)
 }
 
@@ -223,12 +263,40 @@ export async function stopVersion(): Promise<void> {
 }
 
 /**
- * 启动一个版本。
- *
- * 已经在跑同一个且就绪 → 直接返回现有地址；正在启动 → 等它就绪；
- * 跑着别的版本 → 先停再启（一个 dsh 实例共用同一份 profile，不能并存）。
+ * 单次启动的并发令牌。双击 / 并发 IPC 会同时进来两个 `startVersion` ——
+ * 没有这道闸会 spawn 出两个 dsh，旧那个的 `exit` 被 `current === proc` 守卫吞掉
+ * （留孤儿占端口 + 占 profile 写锁），界面却显示另一个实例在跑。
  */
+let startLock: Promise<RunState> | null = null
+
+/** 停止等待中的轮询（`startLock === null` 时调用方在自行组装新实例） */
+function cancelWaiters(proc: Proc): void {
+  proc.startWaiters.splice(0).forEach((reject) =>
+    reject(new Error(`${proc.version} 启动已取消（另一个启动请求接管了状态）\n${proc.tail.slice(-15).join('\n')}`))
+  )
+}
+
+/** 把一次性启动（spawn + 等就绪）包成串行队列：同一个时刻只有一个在跑。 */
 export async function startVersion(
+  version: string,
+  onDesktopProgress?: (progress: DesktopProgress) => void
+): Promise<RunState> {
+  if (startLock !== null) {
+    const running = startLock
+    const state = await running
+    if (state.version === version && state.status === 'running') return state
+    return startVersion(version, onDesktopProgress)
+  }
+  const job = startVersionInner(version, onDesktopProgress)
+  startLock = job
+  try {
+    return await job
+  } finally {
+    if (startLock === job) startLock = null
+  }
+}
+
+async function startVersionInner(
   version: string,
   onDesktopProgress?: (progress: DesktopProgress) => void
 ): Promise<RunState> {
@@ -296,10 +364,20 @@ export async function startVersion(
     }
 
     onDesktopProgress?.({ phase: 'launch', text: '正在启动桌面端…' })
-    const child = launchDesktop(exe, desktopLogPath(version))
-    desktopProc = { version, child }
+    const logPath = desktopLogPath(version)
+    const child = launchDesktop(exe, logPath)
+
+    /*
+     * 桌面端的 stdio 是写进文件的（detached 进程不能用管道），所以这里**跟随那个文件**
+     * 把运行时输出转进终端页 —— 否则「终端」页只有三四行启动器事件，
+     * dsh 自己的 `skipping profile bundle "…": Error: …` 一句都看不到。
+     */
+    const stopTail = tailDesktopLog(logPath, (line) => pushTagged(`桌面端 ${version}`, line))
+
+    desktopProc = { version, child, stopTail }
     // 用户自己关掉桌面端时要清掉状态，否则界面会一直显示「运行中」
     child.on('exit', () => {
+      stopTail()
       if (desktopProc !== null && desktopProc.child === child) desktopProc = null
     })
     return { version, status: 'running', url: null }
@@ -331,7 +409,11 @@ export async function startVersion(
     if (current.status === 'running' && current.url !== null) {
       return { version, status: 'running', url: current.url }
     }
-    if (current.status === 'starting') return waitUntilReady(current)
+    if (current.status === 'starting') {
+      // 在等就绪的过程中被取消（另一个 start 接管 / 超时清了状态）→ 别再等，重新启动
+      if (current !== null && current.version !== version) return startVersionInner(version, onDesktopProgress)
+      return waitUntilReady(current)
+    }
   }
   if (current !== null) await stopVersion()
 
@@ -371,6 +453,7 @@ export function stopAllSync(): void {
   }
   const desktop = desktopProc
   if (desktop !== null) {
+    desktop.stopTail()
     killTree(desktop.child.pid)
     desktopProc = null
   }

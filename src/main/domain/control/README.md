@@ -1,4 +1,4 @@
-# main/domain/control
+﻿# main/domain/control
 
 **控制页**（标签页「控制」，`/control`）背后的全部逻辑。
 
@@ -71,7 +71,7 @@ IPC 在 [../../ipc/control.ts](../../ipc/control.ts)（3 条通道）。
 ## 四个容易踩的坑（都在代码注释里）
 
 1. **必须用真正的 `node.exe`** —— dsh 的加载器会检查 V8 指纹，Electron 自带的那个会被拒。
-   解析顺序在 [../../infrastructure/runtime.ts](../../infrastructure/runtime.ts)。
+   解析顺序在 [../../platform/runtime.ts](../../platform/runtime.ts)。
 2. **端口回退必须写日志**。设置的固定端口被占用时回退到系统分配，但静默换端口会让地址
    重新变得不可预期，用户会以为启动器坏了。所以 `resolvePort` 一定推一行日志。
 3. **桌面端与 dsh 实例互斥**，且同步 web 配置必须在**启动之前**做 ——
@@ -83,12 +83,12 @@ IPC 在 [../../ipc/control.ts](../../ipc/control.ts)（3 条通道）。
 
 原先 `runner → sync → diagnose → runner` 成环，因为 `diagnose` 要从 `runner` 拿
 `bootArgs` / `envFor` / `killTree` / `READY_RE`。现在这四个在
-[../../infrastructure/boot.ts](../../infrastructure/boot.ts)，环就断了。
+[../../platform/boot.ts](../../platform/boot.ts)，环就断了。
 
-注意：断环靠的是**把原语下沉到 infrastructure**，不是把 diagnose 搬出这个目录。
+注意：断环靠的是**把原语下沉到 platform**，不是把 diagnose 搬出这个目录。
 
 另有一条**差点被引入**的环：插件重置要用 `RELEASE_AGE_BYPASS`，若从
 `domain/plugins/pluginInstall.ts` 导出给这里用，就会形成
 `sync → pluginInstall → versions → runner → sync`。所以那个常量住在
-[../../infrastructure/dshCli.ts](../../infrastructure/dshCli.ts) —— 由
+[../../platform/dshCli.ts](../../platform/dshCli.ts) —— 由
 `npm run check:graph` 抓到。

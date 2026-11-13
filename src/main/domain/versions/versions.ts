@@ -1,11 +1,11 @@
-import { existsSync, readdirSync, type Dirent } from 'node:fs'
+﻿import { existsSync, readdirSync, type Dirent } from 'node:fs'
 import type { InstalledVersion, VersionOverview } from '@shared/types/versions'
-import { versionBin, versionRoot } from '../../infrastructure/paths'
-import { fetchRemote, type RemoteInfo } from '../../infrastructure/registry'
+import { versionBin, versionRoot } from '../../platform/paths'
+import { fetchRemote, type RemoteInfo } from '../../platform/registry'
 import { cmpVer, parseVer } from '@utils/version'
 import { currentRun } from '../control/runner'
 
-const VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z._+-]*$/
+export const VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z._+-]*$/
 
 /*
  * 为什么这里没有"扫描系统里 npm 全局安装的 dsh"：

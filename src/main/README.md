@@ -1,4 +1,4 @@
-# main
+﻿# main
 
 主进程。**唯一持有系统能力的地方** —— 渲染层没有 Node，要什么都得经过这里。
 
@@ -8,19 +8,19 @@
 | --- | --- | --- |
 | [ipc/](ipc/) | **怎么被调用** —— 全部通道注册 | 只做参数校验、进度转发、错误包装 |
 | [domain/](domain/) | **做什么** —— 业务逻辑 | 目录名 = 界面上的标签页（正好 6 个） |
-| [infrastructure/](infrastructure/) | **靠什么做** —— 文件、进程、网络、Electron 壳 | 被 ≥2 个领域用，且不含策略 |
+| [platform/](platform/) | **靠什么做** —— 文件、进程、网络、Electron 壳 | 被 ≥2 个领域用，且不含策略 |
 | [api/](api/) | 给**外部程序**用的接口 | 当前为空，见那里的 README |
 | `index.ts` | 装配点 | 只调初始化顺序 + 管生命周期 |
 
 ## 依赖方向
 
-    index ──> ipc ──> domain ──> infrastructure
+    index ──> ipc ──> domain ──> platform
 
-- `ipc` 可以调 `domain` 与 `infrastructure`；
-- `domain` 可以调 `infrastructure`，**不许**调 `ipc` / `api`（方向反了）；
-- `infrastructure` **不许**调 `domain` / `ipc` / `api` ——
-  **有 1 处已知例外**：`infrastructure/imageProxy.ts` → `domain/plugins/market.ts`
-  （图片代理要用市场的区域路由配置；理由与两种改法见 [infrastructure/README.md](infrastructure/README.md)）；
+- `ipc` 可以调 `domain` 与 `platform`；
+- `domain` 可以调 `platform`，**不许**调 `ipc` / `api`（方向反了）；
+- `platform` **不许**调 `domain` / `ipc` / `api` ——
+  **有 1 处已知例外**：`platform/imageProxy.ts` → `domain/plugins/market.ts`
+  （图片代理要用市场的区域路由配置；理由与两种改法见 [platform/README.md](platform/README.md)）；
 - `domain` 之间允许依赖，但**绝不许成环** —— 环会让人"只想改一处，却被迫理解整条链"。
 
 当前 9 条领域间依赖边（`npm run check:graph -- --list` 可随时列出）。
@@ -32,7 +32,7 @@
 
     domain/          改一个功能的**行为**时进这里
     ipc/             改一个功能的**接口**时进这里
-    infrastructure/  改"怎么读文件/起进程/发请求"时进这里
+    platform/  改"怎么读文件/起进程/发请求"时进这里
 
 另外，全部通道注册集中在一处，想知道"这个应用对外暴露了什么"不用翻 6 个目录。
 

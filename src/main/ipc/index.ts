@@ -1,4 +1,4 @@
-import { registerControlIpc } from './control'
+﻿import { registerControlIpc } from './control'
 import { registerPluginsIpc } from './plugins'
 import { registerSettingsIpc } from './settings'
 import { registerSnapshotsIpc } from './snapshots'
@@ -15,7 +15,7 @@ import { registerWindowIpc } from './window'
  *      "这个文件属于哪一层"就变得含糊。现在分工是死的：
  *        `domain/`  → 做什么（策略、状态、算法）
  *        `ipc/`     → 怎么被调用（参数校验、进度转发、错误包装）
- *        `infrastructure/` → 靠什么做（文件、进程、网络、Electron）
+ *        `platform/` → 靠什么做（文件、进程、网络、Electron）
  *   2. **协议面一眼可见。** 全部通道注册集中在这里，想知道"这个应用对外暴露了什么"
  *      不用翻 6 个目录。
  *

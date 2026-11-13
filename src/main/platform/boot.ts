@@ -46,9 +46,10 @@ export function envFor(version: string, node: { path: string }, profile: string)
      */
     NODE_OPTIONS: nodeOptionsValue(),
     /*
-     * 把自己带的 pnpm 垫片目录插到 PATH 最前面（见 infra/runtime 的 bundledBinDir）。
-     * dsh 的插件管理器调的是 PATH 上的 `pnpm` —— 插进去就命中我们自带的那个，
-     * 不再取决于用户机器上装没装（否则换台机器装插件就报 `'pnpm' 不是内部或外部命令`）。
+     * 把自带 pnpm 垫片目录**追加到** PATH 末尾（不是最前面；刻意如此，见 infra/runtime
+     * 的 pathWithBundledBin 注释）。dsh 的插件管理器调的是 PATH 上的 `pnpm` ——
+     * 没有它命中我们自带的那个，不再取决于用户机器上装没装（否则换台机器装插件就报
+     * `'pnpm' 不是内部或外部命令`）。
      */
     PATH: pathWithBundledBin(),
     npm_config_ignore_workspace_root_check: 'true',

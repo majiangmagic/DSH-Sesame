@@ -879,11 +879,20 @@ nav button.view-active {
   flex: 1;
   margin: 0;
   overflow: auto;
-  background: #f7faff;
+  /*
+   * 用暗色令牌，不再写死浅色。
+   *
+   * 这两行原本是从原版**浅色主题**抄来的字面值（`#f7faff` / `#3f5478`）：
+   * 暗色主题统一改由 custom.css 覆盖 `--card` / `--text` 之后，只有这里还留着浅底，
+   * 整个终端面板渲染成一块白板、而周围全是深色。
+   *
+   * 底色比卡片再深一点：日志区是"内嵌的控制台"，与外面的卡片要能分出层次。
+   */
+  background: rgba(4, 8, 16, 0.55);
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 16px;
-  color: #3f5478;
+  color: var(--text);
   font: 12px/1.45 ui-monospace, Consolas, monospace;
   white-space: pre-wrap;
 }

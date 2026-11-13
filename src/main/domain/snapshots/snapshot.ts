@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 插件配置快照 —— 手动 / 自动存，最多 10 份，可回退。
  *
  * 快照的**文件清单照 dsh-plugin-guard**（它实测过这套够用）：
@@ -23,9 +23,9 @@ import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { lstat, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { dshHome, profileDir } from '../../infrastructure/dshHome'
-import { dataRoot } from '../../infrastructure/paths'
-import { readSettings } from '../../infrastructure/settings'
+import { dshHome, profileDir } from '../../platform/dshHome'
+import { dataRoot } from '../../platform/paths'
+import { readSettings } from '../../platform/settings'
 /*
  * 这里**不** import `currentRun`。曾经用它把"存的那一刻在跑哪个版本"记进 manifest，
  * 那个字段已经去掉 —— 理由见 `@shared/types/snapshots` 顶部。
@@ -281,6 +281,13 @@ export function listSnapshots(): SnapshotEntry[] {
   return out.sort((a, b) => b.id.localeCompare(a.id))
 }
 
+/** 快照 id 的底线校验：禁止路径分隔符与 `..`（防目录穿越，restore 与 delete 共用）。 */
+function assertSafeSnapshotId(id: string): void {
+  if (id === '' || id.includes('/') || id.includes('\\') || id.includes('..')) {
+    throw new Error('快照 id 非法：' + id)
+  }
+}
+
 /**
  * 回退到指定快照。
  *
@@ -290,6 +297,7 @@ export function listSnapshots(): SnapshotEntry[] {
  * 只写回文件；`node_modules` 是否随之更新由界面提示，不在这一步自动跑 pnpm。
  */
 export async function restoreSnapshot(id: string): Promise<RestoreResult> {
+  assertSafeSnapshotId(id)
   const profile = SNAPSHOT_PROFILE
   const src = join(dirOf(profile), id)
   if (!existsSync(src)) throw new Error(`快照不存在：${id}`)
@@ -324,13 +332,9 @@ export async function restoreSnapshot(id: string): Promise<RestoreResult> {
  * 删除一份快照。
  *
  * 只删这一份；不清 node_modules、不动 profile。
- * id 里带路径分隔符的一律拒绝 —— 这是一条防目录穿越的底线：
- * 这个函数按 id 直接拼路径，若 id 来自界面且含 ../，就会删到快照目录外面。
  */
 export async function deleteSnapshot(id: string): Promise<boolean> {
-  if (id === '' || id.includes('/') || id.includes('\\') || id.includes('..')) {
-    throw new Error('快照 id 非法：' + id)
-  }
+  assertSafeSnapshotId(id)
   const dir = join(dirOf(SNAPSHOT_PROFILE), id)
   if (!existsSync(dir)) return false
   await rm(dir, { recursive: true, force: true })

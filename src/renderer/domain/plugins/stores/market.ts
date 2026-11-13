@@ -1,8 +1,13 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { MarketCatalog, MarketPlugin } from '@/api'
+import type { MarketCatalog, MarketPlugin, PluginEntry } from '@/api'
 import { api } from '@/api'
 import { compareVersionStrings } from '@utils/version'
+import {
+  resolveInstallTarget,
+  specMatchesTarget,
+  type InstallTarget
+} from '@utils/pluginTarget'
 
 /** 列表一页渲染多少行 —— 目录有四千余条，一次全渲染会把界面拖死 */
 const PAGE_STEP = 120
@@ -15,20 +20,47 @@ export type MarketSort = 'default' | 'stars' | 'downloads' | 'name'
  *
  * 写成**同源绝对路径**（页面在 `app://bundle`），所以不能带第二 host —— 实测
  * `app://img/…` 一律 0ms 失败，因为 Chromium 不把非 `bundle` host 的请求派发给自定义协议。
- * 服务端在 `src/main/infrastructure/imageProxy.ts`，路由见 `src/main/infrastructure/protocol.ts` 的 `IMAGE_PATH_PREFIX`。
+ * 服务端在 `src/main/platform/imageProxy.ts`，路由见 `src/main/platform/protocol.ts` 的 `IMAGE_PATH_PREFIX`。
  */
 const IMAGE_PROXY = '/__img/?u='
 
 /**
- * 「已装」判断用的标识：**优先真 npm 包名**（`plugin.npm`），没有才退回短名。
+ * 「身份」：这条目录记录**唯一**代表哪个东西。
  *
- * 必须这样做的原因（实测）：目录里存在**不同作者的同名短名** —— 4183 行只有 3903 个不同短名，
- * 186 个重复；`dsh-pet` 就有 `ysyyhhh` 与 `zealot00` 两位作者各一份。
- * 按短名匹配会把别人那份也标成"已装"，而且把已装数量算多（曾经出现"已装 2 + 未收录 4 = 6 ≠ 5"）。
- * npm 包名是全球唯一的，用它才能唯一定位。
+ * 三层，逐层更弱但都保证唯一：
+ *   ① npm 包名 —— 全局唯一，最可靠
+ *   ② 仓库归属 `repo:owner/repo` —— 目录里一半条目没有 npm 字段，靠它区分
+ *   ③ `name@owner` —— 连仓库地址都没有时的兜底（那类条目本来也装不了）
+ *
+ * 必须唯一：历史上用"短名"当身份，4183 行只有 3903 个不同短名、186 个重复，
+ * `dsh-pet` 就有两位作者各一份 —— 结果"已装"判定把别人的包也算了进去，
+ * 已装数量还算多了（曾经出现"已装 2 + 未收录 4 = 6 ≠ 5"）。
+ *
+ * ⚠️ 它**不是**安装目标。装什么由 `installTargetOf()` 决定 —— 两个概念曾经混在同一个
+ * 函数里，结果"修撞名 bug"顺手把 5239 条只有 GitHub 的记录锁死了（无法安装）。
  */
 export function identityOf(plugin: MarketPlugin): string {
-  return plugin.npm !== '' ? plugin.npm : plugin.name
+  const npm = (plugin.npm ?? '').trim()
+  if (npm !== '') return npm
+  const target = installTargetOf(plugin)
+  if (target !== null && target.repo !== null) return `repo:${target.repo}`
+  return `${plugin.name}@${plugin.owner}`
+}
+
+/**
+ * 「安装目标」：真正传给 `dsh plugin add` 的那串东西。
+ *
+ * 三段式，与 dsh 自己的市场一致（`dshmarket/lib/sources.js` 的 `installTargetFor`）：
+ * npm 包名 → 同仓库的 Release 产物 → `github:owner/repo`（子包带 `#path:`）。
+ *
+ * @returns 装不了时返回 null（`url` 不是 GitHub 仓库，且没有合法的 npm 名）
+ */
+export function installTargetOf(plugin: MarketPlugin): InstallTarget | null {
+  return resolveInstallTarget({
+    npm: plugin.npm,
+    url: plugin.url,
+    tarball: plugin.tarball
+  })
 }
 
 /** 取第一张可用的截图，包成图片代理地址；没有截图返回空串 */
@@ -80,8 +112,15 @@ export const useMarketStore = defineStore('market', () => {
    * 用户自己的插件会沉到几十上百位之后，"更新"按钮等于够不着。
    */
   const onlyInstalled = ref(false)
-  /** 正在安装或卸载的包名（两者不会同时发生，共用一个字段） */
-  const busyName = ref<string | null>(null)
+  /**
+   * 正在安装 / 卸载 / 更新的**安装目标**集合。
+   *
+   * 曾经是单个 `string | null`，并且"忙就 return" —— 一个安装跑着的时候，别的插件
+   * 点了也**没有任何反应**（点击被丢弃），观感像"整页锁死、只能等"。
+   * 现在：按目标记住哪些行在忙，点击**排队**（真正的互斥在主进程的 `withPluginWriteLock`），
+   * 界面只禁用正在跑的那一行。
+   */
+  const busyTargets = ref<Set<string>>(new Set())
   /** 主进程推回来的进度文案（pnpm 的输出行） */
   const progressText = ref('')
   /** 当前渲染窗口大小，点「加载更多」时增长 */
@@ -117,15 +156,33 @@ export const useMarketStore = defineStore('market', () => {
   })
 
   /**
-   * 已装数量：按**不同标识**数，不是按目录行数。
+   * 已被目录**认领**的已装插件名。
+   *
+   * 这是「已装 N 个」与「未被目录收录」两个统计的唯一依据，判据与 `isInstalled` 同源：
+   *   · npm 条目 → 目录的 npm 名就是已装包名
+   *   · 只有 GitHub 的条目 → 反查 profile 里哪个依赖的规格串指向那个仓库
+   *
+   * 之前这里拿"已装包名"去撞 `identityOf`（npm 名）。对 `npm` 为空的目录条目（占目录
+   * 一半）永远撞不上 —— 于是从 GitHub Release 装的插件（例如
+   * `dsh-purge-community`，目录里的名字叫 `dsh-purge`）被误报成"未被目录收录"。
+   */
+  const claimedNames = computed(() => {
+    const claimed = new Set<string>()
+    for (const plugin of plugins.value) {
+      if (!isInstalled(plugin)) continue
+      const target = installTargetOf(plugin)
+      if (target === null) continue
+      const name = installedNameFor(target)
+      if (name !== '') claimed.add(name)
+    }
+    return claimed
+  })
+
+  /**
+   * 已装数量：按**被目录认领的插件**数，不是按目录行数。
    * （曾经的 bug：遍历目录行去数命中，同名两行就被数成 2 个。）
    */
-  const installedCount = computed(() => {
-    const inCatalog = new Set(plugins.value.map(identityOf))
-    let n = 0
-    for (const name of installedNames.value) if (inCatalog.has(name)) n += 1
-    return n
-  })
+  const installedCount = computed(() => claimedNames.value.size)
 
   /** 从插件自身汇总分类及数量（目录另有 categories 字段，形状不保证，自己算更稳） */
   const categories = computed(() => {
@@ -142,28 +199,25 @@ export const useMarketStore = defineStore('market', () => {
   })
 
   /**
-   * 已装、但**不在目录里**的插件。
+   * 已装、但**目录里确实没有**的插件。
    *
-   * 需要在界面上说出来：市场页只列目录收录的东西，所以"已装 N 个"永远小于 profile 里的实际数量，
-   * 不解释的话看起来像漏算（实测：装了 5 个，目录只收录 2 个）。
+   * 需要在界面上说出来：市场页只列目录收录的东西，所以"已装 N 个"可能小于 profile 里的
+   * 实际数量，不解释的话看起来像漏算。
+   *
+   * ⚠️ 判据必须是 `claimedNames`（与 isInstalled 同源），不能拿包名去撞 npm 名 ——
+   * 那会把所有 git 来源的插件都误报成"未收录"。
    */
-  const unlistedInstalled = computed(() => {
-    const inCatalog = new Set(plugins.value.map(identityOf))
-    return [...installedNames.value].filter((name) => !inCatalog.has(name)).sort()
-  })
+  const unlistedInstalled = computed(() =>
+    [...installedNames.value].filter((name) => !claimedNames.value.has(name)).sort()
+  )
 
   /** 搜索 + 分类筛选后的结果 */
   const filtered = computed<MarketPlugin[]>(() => {
     const needle = query.value.trim().toLowerCase()
     const picked = category.value
     const list = plugins.value.filter((plugin) => {
-      // 与 isInstalled 用同一套判定：**只认 npm 包名**。这里曾经用 identityOf（npm 为空时
-      // 退回短名），结果 catalog 里两个 npm 为空的同名 dsh-pet 也被算成"已装"，
-      // 用户只装了一个却看到三行。
-      if (onlyInstalled.value) {
-        const npm = (plugin.npm ?? '').trim()
-        if (npm === '' || !installedNames.value.has(npm)) return false
-      }
+      // 「只看已装」必须与 isInstalled 用**同一套判定**（曾经两处不一致 → 实测仍是 6 行）
+      if (onlyInstalled.value && !isInstalled(plugin)) return false
       if (picked !== '' && !(plugin.category ?? []).includes(picked)) return false
       if (needle === '') return true
       // 名称、作者与简介都参与匹配：目录里中文简介往往比包名更好搜
@@ -198,6 +252,7 @@ export const useMarketStore = defineStore('market', () => {
       catalog.value = cat
       installedNames.value = new Set(plugins.plugins.map((plugin) => plugin.name))
       installedVersions.value = new Map(plugins.plugins.map((plugin) => [plugin.name, plugin.version]))
+      installedPlugins.value = plugins.plugins
       loaded.value = true
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
@@ -233,25 +288,49 @@ export const useMarketStore = defineStore('market', () => {
   }
 
   /**
-   * 目录条目缺 npm 包名。
+   * 已装插件的完整清单（`name` / `version` / `spec`）。
    *
-   * 这种条目既不能判断"是不是已装"，也**不能从市场安装** —— 入参要用真 npm 包名，
-   * 退回短名会装上同名的另一个包。目录里确有这种记录（详见 isInstalled 的说明）。
+   * 只有 GitHub 的目录记录要靠 `spec` 认领 —— 装完后 key 是包自己的 name，
+   * 与目录里的短名无关，只能比对规格串里的仓库归属。
    */
-  function noNpmName(plugin: MarketPlugin): boolean {
-    return (plugin.npm ?? '').trim() === ''
+  const installedPlugins = ref<PluginEntry[]>([])
+
+  /** 这条记录**能不能从市场安装**（判据是"有没有安装目标"，不是"有没有 npm 名"） */
+  function installable(plugin: MarketPlugin): boolean {
+    return installTargetOf(plugin) !== null
   }
 
   /**
-   * 「已装」**只认 npm 包名**，不用 identityOf 的短名回退。
-   *
-   * 目录里同一个短名可能对应不同作者的不同项目（例如 4 个 dsh-pet），其中一些的 npm
-   * 字段是空的。用短名回退会把它们都算成"已装"，用户看到自己的一个插件变成三四行；
-   * 而且版本、更新目标也都是错的。所以这里严格按 npm 名比 —— 空 npm 一律不算已装。
+   * 「已装」两条判据，缺一不可：
+   *   · npm 条目 → profile 里有同名依赖（包名全局唯一，最可靠）
+   *   · 只有 GitHub 的条目 → 已装依赖的**规格串**指向同一个仓库
+   *     （装完后 pnpm 写的 key 是包自己的 name，与目录里的短名对不上）
    */
   function isInstalled(plugin: MarketPlugin): boolean {
-    const npm = (plugin.npm ?? '').trim()
-    return npm !== '' && installedNames.value.has(npm)
+    const target = installTargetOf(plugin)
+    if (target === null) return false
+    if (target.kind === 'npm') return installedNames.value.has(target.target)
+    return installedPlugins.value.some((item) => specMatchesTarget(item.spec, target))
+  }
+
+  /**
+   * 已装依赖里对应这个安装目标的那一条的**名字**（卸载要用）。
+   *
+   * @returns 没装过时返回空串
+   */
+  function installedNameFor(target: InstallTarget): string {
+    if (target.kind === 'npm') return installedNames.value.has(target.target) ? target.target : ''
+    const hit = installedPlugins.value.find((plugin) => specMatchesTarget(plugin.spec, target))
+    return hit === undefined ? '' : hit.name
+  }
+
+  /** 这条记录在「已装」里的显示版本；只有 GitHub 的条目目录不给版本，回落到已装版本 */
+  function installedVersionOf(plugin: MarketPlugin): string {
+    const target = installTargetOf(plugin)
+    if (target === null) return ''
+    if (target.kind === 'npm') return installedVersions.value.get(target.target) ?? ''
+    const hit = installedPlugins.value.find((item) => specMatchesTarget(item.spec, target))
+    return hit === undefined ? '' : hit.version
   }
 
   /**
@@ -260,15 +339,18 @@ export const useMarketStore = defineStore('market', () => {
    * 只在**两边都能比**的时候给答案：没装过、目录没给版本、目录的 version 不是版本号形状
    * （比如某些条目写的是范围或占位）—— 一律返回空串，不猜。
    *
+   * 只有 npm 条目有版本语义：git / tarball 来源的"更新"取决于仓库的 commit，
+   * 目录不提供可比版本，硬给按钮只会装成同一份。这类要更新请用卸载再安装。
+   *
    * 比较用 `@utils/version`（与主进程**同一份**实现）。这里原先是个"只比数字段"的
    * 简化版，注释还写着"目录里的 version 基本是正式版" —— 但 dsh 的新版本常常只挂在
    * alpha / next 上，那个简化版会把 `0.2.0-rc.2` 判成比 `0.2.0` 新（其实更旧），
    * 于是界面会推一个降级。
    */
   function updateTarget(plugin: MarketPlugin): string {
-    const npm = (plugin.npm ?? '').trim()
-    if (npm === '') return ''
-    const current = installedVersions.value.get(npm)
+    const target = installTargetOf(plugin)
+    if (target === null || target.kind !== 'npm') return ''
+    const current = installedVersions.value.get(target.target)
     if (!current) return ''
     const latest = String(plugin.version ?? '').trim()
     const diff = compareVersionStrings(latest, current)
@@ -316,34 +398,59 @@ export const useMarketStore = defineStore('market', () => {
     }, delay)
   }
 
-  async function install(name: string): Promise<void> {
-    if (busyName.value !== null) return
-    busyName.value = name
+  /** 这条目录记录是否正在被改动（只有它会被禁用） */
+  function busyFor(plugin: MarketPlugin): boolean {
+    const target = installTargetOf(plugin)
+    return target === null ? false : busyTargets.value.has(target.target)
+  }
+
+  /** 是否有任何一条在改动（用于列表整体的淡化效果，不影响可点） */
+  const anyBusy = computed(() => busyTargets.value.size > 0)
+
+  /**
+   * 安装一条目录记录。
+   *
+   * 入参是**目录条目本身**，不是预先算好的字符串 —— 安装目标的三段式解析
+   * （npm / Release 产物 / github:owner/repo）在 `installTargetOf` 里做一次，
+   * 按钮标题与真正执行的内容必然一致。
+   *
+   * 忙的时候**不丢弃点击**：调用会排进主进程的串行队列，界面只是把这一行标成"安装中"。
+   */
+  async function install(plugin: MarketPlugin): Promise<void> {
+    const target = installTargetOf(plugin)
+    if (target === null) {
+      error.value = `${plugin.name} 没有可用的安装来源（既没有 npm 包名，也没有 GitHub 仓库地址）`
+      scheduleResultClear()
+      return
+    }
+    // 同一目标重复点击才忽略（避免重复排队）；不同目标各自排队，互不影响
+    if (busyTargets.value.has(target.target)) return
+    busyTargets.value.add(target.target)
     cancelResultClear()
     progressText.value = ''
     error.value = ''
     try {
-      await api.installPlugin(name, (progress) => {
+      await api.installPlugin(target.target, (progress) => {
         progressText.value = progress.text
       })
       await load(true)
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
-      busyName.value = null
+      busyTargets.value.delete(target.target)
       scheduleResultClear()
     }
   }
 
   /**
-   * 更新一个插件到指定版本。
+   * 把一个已装插件更新到指定版本。
    *
-   * 与安装同一个通道（`add <包>@<版本>`），所以同样用 busyName 表示"这个包正在被改动"。
-   * 目标版本由 `updateTarget` 从目录里取，不在这里自己判断"哪个是最新"。
+   * 与安装同一个通道（`add <包>@<版本>`），目标版本由 `updateTarget` 从目录里取，
+   * 不在这里自己判断"哪个是最新"。忙的时候排队，不丢弃点击。
    */
   async function update(name: string, target: string): Promise<void> {
-    if (busyName.value !== null) return
-    busyName.value = name
+    if (busyTargets.value.has(name)) return
+    busyTargets.value.add(name)
     cancelResultClear()
     progressText.value = ''
     error.value = ''
@@ -355,21 +462,27 @@ export const useMarketStore = defineStore('market', () => {
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
-      busyName.value = null
+      busyTargets.value.delete(name)
       scheduleResultClear()
     }
   }
 
   /**
-   * 卸载一个插件。
+   * 卸载一条目录记录对应的插件（**先把条目解析成真实的依赖名**）。
    *
-   * 入参是**真 npm 包名**（`identityOf`），不是目录短名。
-   * `busyName`（原 `installing`）同时用于安装和卸载 —— 它表达的是"这个包正在被改动"，
-   * 两种操作不会同时发生，共用一个字段就够了。
+   * npm 条目直接用包名；只有 GitHub 的条目要反查 profile 里哪个依赖的规格串指向它 ——
+   * 装完之后 pnpm 写的 key 是包自己的 name，与目录里的短名无关。
    */
-  async function uninstall(name: string): Promise<void> {
-    if (busyName.value !== null) return
-    busyName.value = name
+  async function uninstall(plugin: MarketPlugin): Promise<void> {
+    const target = installTargetOf(plugin)
+    const name = target === null ? '' : installedNameFor(target)
+    if (name === '') {
+      error.value = `${plugin.name} 不在已装依赖里，无法卸载`
+      scheduleResultClear()
+      return
+    }
+    if (busyTargets.value.has(target?.target ?? name)) return
+    busyTargets.value.add(target?.target ?? name)
     cancelResultClear()
     progressText.value = ''
     error.value = ''
@@ -381,7 +494,7 @@ export const useMarketStore = defineStore('market', () => {
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
-      busyName.value = null
+      busyTargets.value.delete(target?.target ?? name)
       scheduleResultClear()
     }
   }
@@ -398,7 +511,9 @@ export const useMarketStore = defineStore('market', () => {
     update,
     onlyInstalled,
     setOnlyInstalled,
-    busyName,
+    busyTargets,
+    busyFor,
+    anyBusy,
     progressText,
     plugins,
     total,
@@ -417,7 +532,9 @@ export const useMarketStore = defineStore('market', () => {
     setSort,
     loadMore,
     isInstalled,
-    noNpmName,
+    installable,
+    installTargetOf,
+    installedVersionOf,
     sameIdentityCount,
     install,
     uninstall

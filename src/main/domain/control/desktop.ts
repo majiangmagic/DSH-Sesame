@@ -1,11 +1,21 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { closeSync, createWriteStream, existsSync, mkdirSync, openSync, readdirSync, renameSync } from 'node:fs'
+import {
+  closeSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readSync,
+  renameSync,
+  statSync
+} from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { app, net } from 'electron'
-import { dshHome } from '../../infrastructure/dshHome'
-import { dataRoot } from '../../infrastructure/paths'
-import { decodeChunk } from '../../infrastructure/textDecode'
+import { dshHome } from '../../platform/dshHome'
+import { dataRoot } from '../../platform/paths'
+import { createStreamDecoder } from '../../platform/textDecode'
 
 /**
  * 「桌面端」启动方式：下载官方 DeepSeek Harness Desktop 安装包 → 静默安装 → 启动。
@@ -241,6 +251,65 @@ export function desktopLogPath(version: string): string {
   return join(versionDir(version), 'desktop.log')
 }
 
+/**
+ * 跟随 `desktop.log`，把**新追加**的每一行回调出去。
+ *
+ * 为什么需要它：桌面端是 `detached + unref` 的独立进程，stdio 直接写进文件
+ * （见 `launchDesktop` 的说明），所以终端页拿不到它的运行时输出 —— 用户在「终端」页
+ * 只能看到三行启动器事件，看不到 dsh 自己的
+ * `dsh: skipping profile bundle "…"` 这类真正有用的报错。
+ *
+ * 实现上刻意**不用 `fs.watch`**：Windows 上它对追加写常常合并/丢失事件，而且文件被
+ * 另一个进程持有写句柄时行为不稳定。改成按偏移量轮询 —— 每 400ms 比一次大小，
+ * 只读新增的那一段，成本可忽略（日志本身只有几十 KB）。
+ *
+ * @returns 停止函数（进程退出或用户点停止时调用）
+ */
+export function tailDesktopLog(logPath: string, onLine: (line: string) => void): () => void {
+  let offset = 0
+  let buffer = ''
+  let stopped = false
+
+  const timer = setInterval(() => {
+    if (stopped) return
+    let size = 0
+    try {
+      size = statSync(logPath).size
+    } catch {
+      return // 文件还没建出来 / 已被删
+    }
+    if (size <= offset) return
+
+    try {
+      const fd = openSync(logPath, 'r')
+      try {
+        const length = size - offset
+        const buf = Buffer.allocUnsafe(length)
+        const read = readSync(fd, buf, 0, length, offset)
+        offset += read
+        buffer += buf.subarray(0, read).toString('utf8')
+      } finally {
+        closeSync(fd)
+      }
+    } catch {
+      return // 读不到就等下一轮，不要因为一次失败停掉跟随
+    }
+
+    // 跨块行装配：一次 write 不一定正好落在换行处，半行要留到下一轮
+    const parts = buffer.split(/\r?\n/)
+    buffer = parts.pop() ?? ''
+    for (const raw of parts) {
+      const line = raw.replace(/\s+$/, '')
+      if (line !== '') onLine(line)
+    }
+  }, 400)
+
+  return () => {
+    stopped = true
+    clearInterval(timer)
+  }
+}
+
 export function launchDesktop(exe: string, logPath: string): ChildProcess {
   /*
    * stdout/stderr 落到 `<版本目录>/desktop.log`（每次启动覆盖）。
@@ -354,11 +423,15 @@ export function installedDesktopVersions(): string[] {
  *
  * 用途：装插件（sync.ts）、`--profile desktop --dump-config` 诊断（diagnose.ts）。
  * 它在桌面端**运行时**会被 profile 写锁挡住，所以只用于「启动前」与「只读诊断」。
+ *
+ * ⚠️ 必须带超时：CLI 卡住（profile 锁、Electron 首启弹窗）时，没有计时器就会
+ * 永远 pending —— sync.ts 因此把桌面端永远起不来，且界面没有任何取消路径。
  */
 export function runDesktopCli(
   rt: DesktopRuntime,
   args: string[],
-  onLine: (line: string) => void
+  onLine: (line: string) => void,
+  timeoutMs = 120_000
 ): Promise<{ code: number; tail: string[] }> {
   const tail: string[] = []
   return new Promise((resolve, reject) => {
@@ -368,11 +441,29 @@ export function runDesktopCli(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
     })
-    let buffer = ''
-    const consume = (chunk: Buffer): void => {
-      buffer += decodeChunk(chunk)
-      const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() ?? ''
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        // 已经退了
+      }
+      reject(new Error(`桌面端 CLI 超时（${Math.round(timeoutMs / 1000)}s）`))
+    }, timeoutMs)
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    child.once('close', (code) => {
+      clearTimeout(timer)
+      resolve({ code: code ?? -1, tail })
+    })
+
+    const decoders = { stdout: createStreamDecoder(), stderr: createStreamDecoder() }
+    const buffers = { stdout: '', stderr: '' }
+    const consume = (which: 'stdout' | 'stderr') => (chunk: Buffer): void => {
+      buffers[which] += decoders[which].decode(chunk)
+      const lines = buffers[which].split(/\r?\n/)
+      buffers[which] = lines.pop() ?? ''
       for (const line of lines) {
         const text = line.replace(/\s+$/, '')
         if (!text) continue
@@ -381,9 +472,7 @@ export function runDesktopCli(
         onLine(text)
       }
     }
-    child.stdout?.on('data', consume)
-    child.stderr?.on('data', consume)
-    child.on('error', reject)
-    child.on('close', (code) => resolve({ code: code ?? -1, tail }))
+    child.stdout?.on('data', consume('stdout'))
+    child.stderr?.on('data', consume('stderr'))
   })
 }

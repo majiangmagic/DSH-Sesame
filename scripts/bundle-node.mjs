@@ -1,7 +1,7 @@
-/**
+﻿/**
  * 把当前这个 node.exe 复制到 node-bundle/node/，供 electron-builder 的 extraFiles 打进包。
  *
- * 落点是 <安装目录>/node/node.exe —— 正是 src/main/infrastructure/runtime.ts 的第三条解析路径
+ * 落点是 <安装目录>/node/node.exe —— 正是 src/main/platform/runtime.ts 的第三条解析路径
  * （`join(root, 'node', 'node.exe')`，kind: 'bundled'）。放进去就自动生效，不用改运行时代码。
  *
  * 为什么复制"当前运行的这个 node"而不是去找系统的：
@@ -71,7 +71,10 @@ if (sevenZip !== null) {
   console.log(`  已内置 7za  ${(statSync(dest7za).size / 1024 / 1024).toFixed(1)} MB`)
   console.log(`  来源  ${sevenZip}`)
 } else {
-  console.warn('  警告：没找到 7za.exe —— 用户机器上「解压桌面端」会失败。')
+  // 硬失败：缺了它打出的安装包"能装但用户端解压桌面端必失败"，整个发布链却全绿 ——
+  // 宁可让构建在这里停下来，也不让残废的包流出去。
+  console.error('  错误：没找到 7za.exe —— 用户机器上「解压桌面端」会失败。请先装好 7zip-bin 再打包。')
+  process.exit(1)
 }
 
 /*
@@ -107,8 +110,11 @@ if (pnpm !== null) {
   console.log(`  来源  ${pnpm.dir}`)
   console.log(`  垫片  ${join(binDir, isWin ? 'pnpm.cmd' : 'pnpm')}`)
 } else {
-  console.warn('  警告：没找到 pnpm —— 用户机器上「安装插件」会失败（dsh 调的是 PATH 上的 pnpm）。')
-  console.warn(`        先跑一次 \`corepack prepare pnpm@${PREFERRED_PNPM} --activate\` 或 \`npm i -g pnpm\`，再重新打包。`)
+  // 硬失败：缺了它打出的安装包"能装但用户端装插件必失败"，整个发布链却全绿 ——
+  // 宁可让构建在这里停下来，也不让残废的包流出去。
+  console.error('  错误：没找到 pnpm —— 用户机器上「安装插件」会失败（dsh 调的是 PATH 上的 pnpm）。')
+  console.error(`        先跑一次 \`corepack prepare pnpm@${PREFERRED_PNPM} --activate\` 或 \`npm i -g pnpm\`，再重新打包。`)
+  process.exit(1)
 }
 
 /** 找 pnpm 真身（那个含 bin/pnpm.cjs 的目录）。 */

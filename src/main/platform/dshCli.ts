@@ -1,11 +1,11 @@
-/**
+﻿/**
  * 调用 **dsh 的 CLI** 时共用的东西。
  *
  * 为什么单独一个文件：这些参数被**两个领域**用到 ——
  * `domain/plugins/pluginInstall.ts`（装 / 卸 / 更新 web 的插件）与
  * `domain/control/sync.ts`（把 web 的插件一比一搬到桌面端）。
  *
- * 放在 `infrastructure/` 而不是其中任何一个领域里，是本项目分层规则的直接结果：
+ * 放在 `platform/` 而不是其中任何一个领域里，是本项目分层规则的直接结果：
  * **被 ≥2 个领域使用的机制不下沉到某一个领域**。放错地方不只是不好看 ——
  * 实测过：把下面这个常量从 `pluginInstall` 导出给 `sync` 用，会立刻形成
  *   `sync → pluginInstall → versions → runner → sync`

@@ -1,6 +1,6 @@
 {
   "name": "dsh-sesame",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "description": "DSH-Sesame —— dsh 的桌面启动器（Electron + Vue 3 + TypeScript）",
   "author": "DSH-Sesame",
@@ -15,6 +15,7 @@
     "check:market": "node scripts/check-market-version.mjs",
     "smoke:market": "node scripts/smoke-market.mjs",
     "check:graph": "node scripts/check-import-graph.mjs",
+    "check:target": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-plugin-target.mjs",
     "check:mirror": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-desktop-mirror.mjs",
     "check:update": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-update.mjs",
     "bundle:node": "node scripts/bundle-node.mjs",
@@ -40,7 +41,7 @@
     "electron-winstaller@5.4.0": true
   },
   "dependencies": {
-    "dshmarket": "1.66.20",
+    "dshmarket": "1.73.19",
     "pinia": "^4.0.3",
     "semver": "^7.8.5",
     "vue": "^3.5.43",

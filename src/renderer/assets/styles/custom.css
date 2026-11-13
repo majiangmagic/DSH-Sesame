@@ -1328,3 +1328,58 @@ main,
 #updateNotes {
   align-self: flex-start;
 }
+
+/* ---- 快照列表 ----
+ *
+ * 这三个类名以前在样式表里**根本不存在**（组件里写着 class，没有任何规则命中），
+ * 于是 `<ul>` 带着默认圆点、`<strong>` 与 `<span>` 各自 inline 挤在一起，
+ * 渲染成「开启插件 xxx2026/11/9 23:36:50 · auto · 5 个文件」—— 少了分隔、也少了层级。
+ * 排版与 .version-row / .version-main / .version-meta 保持一致。
+ */
+
+.plugin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.plugin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 10px;
+  transition: background 0.12s ease;
+}
+
+.plugin-row:hover {
+  background: var(--accent-soft);
+}
+
+.plugin-row:last-child {
+  border-bottom: 0;
+}
+
+.plugin-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.plugin-name {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}
+
+.plugin-sub {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+}

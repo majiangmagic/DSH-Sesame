@@ -174,7 +174,7 @@ export default {
     update: '更新',
     updating: '更新中…',
     updateTitle: '更新到 {version}',
-    noNpmHint: '目录里这条记录没有 npm 包名，无法从市场安装',
+    noSourceHint: '目录里这条记录既没有 npm 包名，也没有 GitHub 仓库地址，无从安装',
     installPending: '安装动作尚未接入'
   },
 

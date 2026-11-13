@@ -1,13 +1,14 @@
 import { execFileSync, spawn } from 'node:child_process'
-import { decodeChunk } from '../../infrastructure/textDecode'
+import { decodeChunk } from '../../platform/textDecode'
 import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { cmpVer, parseVer } from '@utils/version'
-import { dshHome, profileDir } from '../../infrastructure/dshHome'
+import { repoOfSpec } from '@utils/pluginTarget'
+import { dshHome, profileDir } from '../../platform/dshHome'
 import { ensureProfileInitialized } from '../control/diagnose'
 import { listInstalled } from '../versions/versions'
-import { pathWithBundledBin, requireNode } from '../../infrastructure/runtime'
-import { RELEASE_AGE_BYPASS } from '../../infrastructure/dshCli'
+import { pathWithBundledBin, requireNode } from '../../platform/runtime'
+import { RELEASE_AGE_BYPASS } from '../../platform/dshCli'
 
 /**
  * 插件安装 / 卸载 —— **走 dsh 自己的 `plugin` 命令**。
@@ -66,7 +67,7 @@ function pickDsh(): { version: string; bin: string } {
 const PLUGIN_TIMEOUT_MS = 240_000
 
 /**
- * 一次性关掉 pnpm 的"最小发布年龄"闸 —— 常量在 `infrastructure/dshCli.ts`。
+ * 一次性关掉 pnpm 的"最小发布年龄"闸 —— 常量在 `platform/dshCli.ts`。
  *
  * 挪出去是因为 `control/sync.ts` 也要用它，而从这个文件导出会形成
  * `sync → pluginInstall → versions → runner → sync` 的循环依赖。
@@ -267,6 +268,27 @@ function manifestDeps(): Record<string, string> {
 }
 
 /**
+ * 这条规格串在清单里对应哪个依赖名；没装过返回 null。
+ *
+ * 不能直接拿规格串当 key 查：只有 npm 来源的 key 才是包名本身。git / tarball 来源装完后
+ * pnpm 写的 key 是**包自己的 name**（常常与目录里的短名无关），规格串则放在 value 里。
+ * 这里两种形态都认，否则装成功了还会被判成"没装"。
+ */
+function findInstalledKey(spec: string, deps: Record<string, string>): string | null {
+  if (Object.prototype.hasOwnProperty.call(deps, spec)) return spec
+  for (const [name, value] of Object.entries(deps)) {
+    if (value === spec) return name
+  }
+  // pnpm 可能把 github:owner/repo 规范化成 github:owner/repo#<sha> 之类 —— 按仓库归属兜底
+  const repo = repoOfSpec(spec)
+  if (repo === null) return null
+  for (const [name, value] of Object.entries(deps)) {
+    if (repoOfSpec(value) === repo) return name
+  }
+  return null
+}
+
+/**
  * 读 `node_modules` 里那个包**实际装到的版本**。读不到返回 null。
  *
  * 为什么需要它：清单里的声明（`package.json` 的 `dependencies`）不等于装上了什么。
@@ -305,36 +327,55 @@ function progressLine(text: string, onProgress: (progress: PluginProgress) => vo
 /**
  * 安装一个插件到 profile。
  *
- * @param packageName - **真 npm 包名**（目录的 `npm` 字段），不是短名
+ * @param spec - 安装目标规格串。**不是**"包名"了，三种形态都收：
+ *   · npm 包名（`@scope/name`）→ pnpm 去 registry 装
+ *   · 作者的 Release 产物 URL（`https://github.com/o/r/releases/download/…/x.tgz`）
+ *   · `github:owner/repo`（monorepo 子包带 `#path:/sub`）
+ *   由渲染层的 `@utils/pluginTarget` 的 `resolveInstallTarget` 算出来，与 dsh 自己的
+ *   市场同一套三段式规则。
  */
 export async function installPlugin(
-  packageName: string,
+  spec: string,
   onProgress: (progress: PluginProgress) => void = () => {}
 ): Promise<void> {
-  const dsh = pickDsh()
-  onProgress({ phase: 'resolve', text: `用 dsh ${dsh.version} 安装 ${packageName}…` })
+  const target = typeof spec === 'string' ? spec.trim() : ''
+  if (target === '') throw new Error('缺少安装目标')
+  // 以 `-` 开头会被 dsh/pnpm 当成选项（`--registry=…`），不是包名
+  if (target.startsWith('-')) throw new Error(`安装目标不合法：${target}`)
 
-  if (Object.prototype.hasOwnProperty.call(manifestDeps(), packageName)) {
-    onProgress({ phase: 'done', text: `${packageName} 已经装过了` })
+  const dsh = pickDsh()
+  onProgress({ phase: 'resolve', text: `用 dsh ${dsh.version} 安装 ${target}…` })
+
+  const before = manifestDeps()
+  const already = findInstalledKey(target, before)
+  if (already !== null) {
+    onProgress({ phase: 'done', text: `${already} 已经装过了` })
     return
   }
 
   const outcome = await run(
-    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', packageName, RELEASE_AGE_BYPASS],
+    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', target, RELEASE_AGE_BYPASS],
     (line) =>
     progressLine(line, onProgress)
   )
   if (outcome.code !== 0) {
-    throw new Error(`安装 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`)
+    throw new Error(`安装 ${target} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`)
   }
-  // 命令成功不等于装上了：核对清单。dsh 的 plugin 命令会在 pnpm 成功后 reconcile
-  // dsh.profile.bundles，所以清单里出现即表示依赖与启用清单都已写好。
-  if (!Object.prototype.hasOwnProperty.call(manifestDeps(), packageName)) {
+  /*
+   * 命令成功不等于装上了，要核对清单。
+   *
+   * 核对的**不是**"清单里有没有这个规格串当 key" —— 那只对 npm 来源成立。git / tarball
+   * 来源装完后 key 是包自己的 name，过去因此把成功报成失败（"没出现在 profile 清单里"）。
+   * 现在按三种形态认：key 相等 / value 相等 / 仓库归属相同。
+   */
+  const after = manifestDeps()
+  const landed = findInstalledKey(target, after)
+  if (landed === null) {
     throw new Error(
-      `命令成功退出，但 ${packageName} 没出现在 profile 清单里\n${outcome.tail.slice(-10).join('\n')}`
+      `命令成功退出，但 ${target} 没出现在 profile 清单里\n${outcome.tail.slice(-10).join('\n')}`
     )
   }
-  onProgress({ phase: 'done', text: `${packageName} 安装完成` })
+  onProgress({ phase: 'done', text: `${landed} 安装完成` })
 }
 
 /**

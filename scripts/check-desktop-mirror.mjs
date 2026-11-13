@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 打印「桌面端 profile 的插件」与「web profile 的插件」的差异。
  *
  * 用法：
@@ -29,7 +29,7 @@ import { diffMirror, describeDiff, isEmptyDiff } from '../src/main/domain/contro
 const quiet = process.argv.includes('--quiet')
 
 /**
- * dsh 数据目录。与 `src/main/infrastructure/dshHome.ts` 同一条优先级
+ * dsh 数据目录。与 `src/main/platform/dshHome.ts` 同一条优先级
  * （设置里的值 > DSH_HOME > ~/.dsh），但这里读不到启动器的设置，所以从环境变量开始。
  */
 function dshHome() {

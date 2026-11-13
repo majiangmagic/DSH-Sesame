@@ -1,18 +1,18 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+﻿import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { SETTINGS_CHANNELS, UPDATE_CHANNELS } from '@shared/constants/channels'
 import { applySettingsPatch } from '../domain/settings/apply'
 import { checkLauncherUpdate, installLauncherUpdate } from '../domain/settings/update'
-import { readSettings } from '../infrastructure/settings'
+import { readSettings } from '../platform/settings'
 
 /**
  * 设置页的 IPC。**很薄** —— 只做参数接收与转发：
  *
- *   读 → `infrastructure/settings.ts`（JSON 文件读写，纯机制）
+ *   读 → `platform/settings.ts`（JSON 文件读写，纯机制）
  *   写 → `domain/settings/apply.ts`（校验 + 落盘编排，策略）
  *   更新启动器自己 → `domain/settings/update.ts`（检查 + 下载 + 静默安装）
  *
- * 为什么这样分：设置被 `infrastructure/paths.ts` 与 `infrastructure/dshHome.ts`
- * 读（版本池位置、DSH_HOME），所以**原始读写必须留在 infrastructure** ——
+ * 为什么这样分：设置被 `platform/paths.ts` 与 `platform/dshHome.ts`
+ * 读（版本池位置、DSH_HOME），所以**原始读写必须留在 platform** ——
  * 搬进 domain 会让文件系统层反向依赖业务层。于是 domain 侧只收"该怎么处理这个载荷"。
  *
  * 为什么"更新启动器自己"也在这个文件：它的入口是设置页上的按钮，

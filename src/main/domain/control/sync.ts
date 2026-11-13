@@ -1,11 +1,12 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+﻿import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { profileDir } from '../../infrastructure/dshHome'
+import { profileDir } from '../../platform/dshHome'
 import { desktopRuntime, installedDesktopVersions, runDesktopCli, type DesktopRuntime } from './desktop'
 import { peerMismatch, readPluginManifest } from './diagnose'
 import { PROTECTED_PACKAGE_RE, patchPathOf } from '../plugins/pluginState'
-import { RELEASE_AGE_BYPASS } from '../../infrastructure/dshCli'
+import { RELEASE_AGE_BYPASS } from '../../platform/dshCli'
 import { describeDiff, diffMirror, isNonRegistry, type PluginView } from './pluginMirror'
+import { cmpVer, parseVer } from '@utils/version'
 
 /**
  * 把 **web profile** 的插件与模型提供商同步到 **桌面端 profile**。
@@ -430,7 +431,14 @@ function mergePatchEntries(onProgress: (p: SyncProgress) => void): {
 
 /** 挑一个已解压、且带完整运行时的桌面端版本；优先用调用方指定的那个。 */
 function pickDesktop(version?: string): { version: string; rt: DesktopRuntime } | null {
-  const all = installedDesktopVersions().sort().reverse()
+  // 按 semver 从高到低排 —— 字符串排序会把 "0.2.9" 排到 "0.2.10" 前面，
+  // 于是"最新版"实际挑到的是旧的。与 @utils/version 同一套比较逻辑。
+  const all = installedDesktopVersions().sort((a, b) => {
+    const pa = parseVer(a)
+    const pb = parseVer(b)
+    if (pa === null || pb === null) return b.localeCompare(a)
+    return cmpVer(pb, pa)
+  })
   const order = version !== undefined && version !== '' ? [version, ...all.filter((v) => v !== version)] : all
   for (const candidate of order) {
     const rt = desktopRuntime(candidate)

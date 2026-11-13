@@ -1,8 +1,8 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+﻿import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { DESKTOP_CHANNELS, DIAGNOSE_CHANNELS, VERSION_CHANNELS } from '@shared/constants/channels'
 import type { DesktopProgressEvent } from '@shared/types/events'
 import { pushTagged } from '../domain/terminal/logbus'
-import { readSettings } from '../infrastructure/settings'
+import { readSettings } from '../platform/settings'
 import { diagnose, diagnoseDesktop } from '../domain/control/diagnose'
 import { startVersion, stopVersion } from '../domain/control/runner'
 

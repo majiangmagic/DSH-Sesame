@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 启动诊断：**限时启动一次 dsh，读它自己打印的失败诊断，找出有问题的插件名**。
  *
  * 为什么这样做（都是实测得来的，不是设计推测）：
@@ -28,18 +28,18 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DiagnosedProblem, DiagnosisResult } from '@shared/types/control'
 import { satisfies } from 'semver'
-import { dshHome, profileDir } from '../../infrastructure/dshHome'
-import { requireNode } from '../../infrastructure/runtime'
+import { dshHome, profileDir } from '../../platform/dshHome'
+import { requireNode } from '../../platform/runtime'
 /*
  * 启动原语取自 infra/boot，而**不是** domain/control/runner —— 这一点是有意的：
  * diagnose 只需要"怎么起一个 dsh 进程"，不需要知道 runner 的运行状态机。
  * 从 runner 取会形成 diagnose → runner → sync → diagnose 的环。
  */
-import { bootArgs, envFor, killTree, READY_RE } from '../../infrastructure/boot'
+import { bootArgs, envFor, killTree, READY_RE } from '../../platform/boot'
 import { desktopLogPath, desktopRuntime, runDesktopCli } from './desktop'
-import { readSettings } from '../../infrastructure/settings'
-import { decodeChunk } from '../../infrastructure/textDecode'
-import { versionBin } from '../../infrastructure/paths'
+import { readSettings } from '../../platform/settings'
+import { decodeChunk } from '../../platform/textDecode'
+import { versionBin } from '../../platform/paths'
 
 /** 硬上限：不管怎样都判定失败 */
 const HARD_CAP_MS = 45_000

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 导入图自检：**循环依赖**与**分层越界**。
  *
  * 为什么需要它：`src/README.md` 里那几条依赖规则（renderer 不许碰 main、
@@ -24,8 +24,8 @@ const SRC = join(ROOT, 'src')
  */
 const ALLOWED = new Set([
   // 图片代理需要市场的区域路由配置（截图在国内直连不通，要按市场配置改写）。
-  // 理由与两种改法见 src/main/infrastructure/README.md
-  'src/main/infrastructure/imageProxy.ts -> src/main/domain/plugins/market.ts'
+  // 理由与两种改法见 src/main/platform/README.md
+  'src/main/platform/imageProxy.ts -> src/main/domain/plugins/market.ts'
 ])
 
 const posix = (p) => p.split('\\').join('/')
@@ -144,15 +144,15 @@ for (const [from, deps] of graph) {
         'shared / utils 是叶子，不许依赖进程层'
       ],
       /*
-       * infrastructure 是"靠什么做"（文件、进程、网络、Electron 壳），不许依赖
+       * platform 是"靠什么做"（文件、进程、网络、Electron 壳），不许依赖
        * domain（做什么）或 ipc（怎么被调用）。反过来依赖会让"换掉一个领域"
        * 变成"要动基础设施"，这一层的意义就没了。
        */
       [
-        f.startsWith('src/main/infrastructure/') && /^src\/main\/(domain|ipc|api)\//.test(t),
-        'infrastructure 不许依赖 domain / ipc / api'
+        f.startsWith('src/main/platform/') && /^src\/main\/(domain|ipc|api)\//.test(t),
+        'platform 不许依赖 domain / ipc / api'
       ],
-      // ipc 是适配层：只许调 domain 与 infrastructure，不许反向被它们依赖（由上一条覆盖）
+      // ipc 是适配层：只许调 domain 与 platform，不许反向被它们依赖（由上一条覆盖）
       // domain 之间允许依赖，但绝不许成环 —— 环由上面的循环检测负责
       [
         f.startsWith('src/main/domain/') && /^src\/main\/(ipc|api)\//.test(t),

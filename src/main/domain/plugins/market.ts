@@ -1,6 +1,6 @@
-import { createRequire } from 'node:module'
+﻿import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { registryUrl } from '../../infrastructure/registry'
+import { registryUrl } from '../../platform/registry'
 
 /**
  * 把 dshmarket 当**库**调用。

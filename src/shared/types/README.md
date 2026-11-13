@@ -1,4 +1,4 @@
-# shared/types
+﻿# shared/types
 
 **跨进程共享的形状** —— 纯类型，没有实现，编译后基本被擦除。
 
@@ -28,7 +28,7 @@
 
 ## `settings.ts` 与主进程那份的关系
 
-`infrastructure/settings.ts` 的 `LauncherSettings` 是**读写真身**，
+`platform/settings.ts` 的 `LauncherSettings` 是**读写真身**，
 这里的 `LauncherSettingsPayload` 是**跨进程传的那一份**，
 渲染层 `api/contract.ts` 的 `SettingsPayload` 再在其上做面向界面的包装。
 三份必须一致 —— 目前是手工同步，见根目录 `DEVELOPING.md` 的"还缺什么"。

@@ -134,8 +134,8 @@ onMounted(refresh)
       <ul class="plugin-list" id="snapList" v-if="list.length > 0">
         <li class="plugin-row" v-for="s in list" :key="s.id">
           <div class="plugin-meta">
-            <strong>{{ s.label || s.id }}</strong>
-            <span>
+            <strong class="plugin-name">{{ s.label || s.id }}</strong>
+            <span class="plugin-sub">
               {{ when(s.at) }} · {{ s.trigger }} · {{ s.files.length }} {{ t('snap.files') }}
             </span>
           </div>

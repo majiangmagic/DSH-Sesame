@@ -1,4 +1,4 @@
-# src
+﻿# src
 
 DSH-Sesame 的全部源码。**Electron 三进程 + 两个中立层**：
 
@@ -15,11 +15,11 @@ DSH-Sesame 的全部源码。**Electron 三进程 + 两个中立层**：
     main/
       ipc/              怎么被渲染层调用（全部通道注册集中在这里）
       domain/           做什么 —— 目录名严格等于界面上的 6 个标签页
-      infrastructure/   靠什么做（文件、进程、网络、Electron 壳）
+      platform/   靠什么做（文件、进程、网络、Electron 壳）
       api/              给**外部程序**用的接口（当前为空，见那里的 README）
       index.ts          装配点
 
-依赖方向是单向的：`index → ipc → domain → infrastructure`，
+依赖方向是单向的：`index → ipc → domain → platform`，
 且 `shared` / `utils` 是被所有层引用的叶子。
 
 ## 为什么 `shared` 与 `utils` 必须独立在顶层

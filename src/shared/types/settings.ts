@@ -1,7 +1,7 @@
-/**
+﻿/**
  * 启动器设置的**共享形状**。
  *
- * 与主进程 `src/main/infrastructure/settings.ts` 的 `LauncherSettings` 必须一致 ——
+ * 与主进程 `src/main/platform/settings.ts` 的 `LauncherSettings` 必须一致 ——
  * 那边是读写的真身，这里是跨进程传的那一份。渲染层自己的 `SettingsPayload`
  * （见 `src/renderer/api/contract.ts`）再在其上做面向界面的包装。
  *

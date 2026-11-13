@@ -293,6 +293,11 @@ export async function installLauncherUpdate(
   if (!info.available || info.latest === null || info.assetUrl === null) {
     throw new Error(`当前已是最新版本（${info.current}）`)
   }
+  // 完整性校验不可缺席：latest.yml 缺 sha512 时**拒绝安装**，
+  // 而不是像之前那样悄悄跳过校验 —— 那样整个安装包的完整性只靠 HTTPS 赌。
+  if (info.sha512 === null) {
+    throw new Error('发布信息里缺少 sha512 校验值，拒绝安装。请稍后重试，或到发布页手动下载。')
+  }
 
   installing = true
   try {

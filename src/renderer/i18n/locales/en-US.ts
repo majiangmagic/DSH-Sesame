@@ -175,7 +175,7 @@ const enUS: typeof zhCN = {
     update: 'Update',
     updating: 'Updating…',
     updateTitle: 'Update to {version}',
-    noNpmHint: 'This catalog entry has no npm package name, so it cannot be installed from here',
+    noSourceHint: 'This catalog entry has neither an npm package name nor a GitHub repository, so there is nothing to install from',
     installPending: 'Installing is not wired up yet'
   },
 

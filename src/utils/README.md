@@ -1,4 +1,4 @@
-# utils
+﻿# utils
 
 **环境无关的纯函数。** 主进程与渲染层共用。
 
@@ -15,7 +15,7 @@
 所以一个用了 `Buffer` 的函数放进来，渲染层就会**隐式拿到 Node 全局**：
 编译能过，但"渲染层没有 Node"这个边界被悄悄破坏了。
 
-反例：`main/infrastructure/textDecode.ts` 的签名是 `decodeChunk(chunk: Buffer)`，
+反例：`main/platform/textDecode.ts` 的签名是 `decodeChunk(chunk: Buffer)`，
 所以它**必须**留在主进程侧，不能进这里。
 
 ## 与 `shared` 的区别
@@ -40,4 +40,4 @@
 ## 边界
 
 这里放"纯计算"。有网络、有文件、有进程的都不行 —— 那些属于
-`main/infrastructure/`（例如 `registry.ts` 有 `fetch`，留在主进程侧）。
+`main/platform/`（例如 `registry.ts` 有 `fetch`，留在主进程侧）。

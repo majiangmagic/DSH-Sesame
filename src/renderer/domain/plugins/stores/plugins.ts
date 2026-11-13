@@ -11,9 +11,21 @@ import { api, type PluginEntry, type PluginList } from '@/api'
 export const usePluginsStore = defineStore('plugins', () => {
   const data = ref<PluginList | null>(null)
   const loading = ref(true)
-  /** 正在切换的插件包名，用于禁用它的开关避免连点 */
-  const toggling = ref<string | null>(null)
+  /**
+   * 正在切换的插件包名集合。
+   *
+   * 曾经是单个 `string | null` 槽位，并且 `if (toggling.value) return` —— 前一个还没回来时
+   * **后来的点击被静默丢弃**，表现就是"点了一次开关，再点别的插件没反应"。
+   * 主进程已经有串行闸（`withPluginWriteLock`），所以这里只需要记住"哪些行在忙"，
+   * 让点击**排队**而不是消失。
+   */
+  const toggling = ref<Set<string>>(new Set())
   const error = ref('')
+
+  /** 这一行是否正在切换（只有它会禁用，不再锁整页） */
+  function isToggling(name: string): boolean {
+    return toggling.value.has(name)
+  }
 
   const plugins = computed<PluginEntry[]>(() => data.value?.plugins ?? [])
 
@@ -48,8 +60,9 @@ export const usePluginsStore = defineStore('plugins', () => {
   }
 
   async function setEnabled(name: string, enabled: boolean): Promise<void> {
-    if (toggling.value) return
-    toggling.value = name
+    // 同一个插件已经在切换 → 忽略连点；**别的插件照常排队**（不再整页丢弃）
+    if (toggling.value.has(name)) return
+    toggling.value.add(name)
     error.value = ''
     try {
       await api.setPluginEnabled(name, enabled)
@@ -59,9 +72,9 @@ export const usePluginsStore = defineStore('plugins', () => {
       // 失败时把列表拉回真实状态，避免开关停在用户点过的位置上
       await load()
     } finally {
-      toggling.value = null
+      toggling.value.delete(name)
     }
   }
 
-  return { data, loading, toggling, error, plugins, summary, load, setEnabled }
+  return { data, loading, toggling, isToggling, error, plugins, summary, load, setEnabled }
 })
