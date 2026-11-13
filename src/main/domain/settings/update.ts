@@ -1,11 +1,47 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, readFileSync, statSync, unlinkSync } from 'node:fs'
+import {
+  appendFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  unlinkSync
+} from 'node:fs'
 import { join } from 'node:path'
 import { app, net } from 'electron'
 import { compareVersionStrings } from '@utils/version'
+import { destroyTray } from '../../platform/tray'
+import { dataRoot, dataRootInsideInstallDir } from '../../platform/paths'
+import { stopAllSync } from '../control/runner'
 import type { LauncherUpdateInfo, LauncherUpdateProgressEvent } from '@shared/types/update'
 import { parseLatestYml, releaseAssetUrl, releasePageUrl, repoSlugFrom } from './updateMeta'
+
+/**
+ * 静默安装参数（逐字来自 electron-builder 的 NSIS 白名单，见文件头说明）。
+ */
+const INSTALLER_ARGS = ['/S', '--updated', '--force-run']
+
+/**
+ * 更新过程日志（`<userData>/update.log`）。
+ *
+ * 为什么需要：更新失败时应用已经退出，终端页那份内存缓冲跟着没了 —— 用户只看到
+ * "点了更新、然后就没了"，没有任何可查的东西。写成文件，下一次至少能回答
+ * "安装器到底起没起来、几秒退的、退了几号"。
+ */
+export function updateLogPath(): string {
+  return join(app.getPath('userData'), 'update.log')
+}
+
+function appendUpdateLog(line: string): void {
+  try {
+    mkdirSync(app.getPath('userData'), { recursive: true })
+    appendFileSync(updateLogPath(), `[${new Date().toISOString()}] ${line}\n`, 'utf8')
+  } catch {
+    // 日志写不进去不该影响更新本身
+  }
+}
 
 /**
  * **启动器自己**的更新：检查 GitHub Releases → 下载安装包 → 校验 → 静默安装 → 退出。
@@ -322,29 +358,82 @@ export async function installLauncherUpdate(
     onProgress({ phase: 'install', text: '正在启动安装程序…应用会退出并自动重启', percent: null })
 
     /*
-     * 参数见文件头。`detached` + `unref`：安装器要活得比我们久 ——
-     * 我们马上 `app.quit()`，它得继续把文件替完。
+     * 数据目录与安装目录重叠时**不敢装**：NSIS 升级会先把 $INSTDIR 逐个改名搬走，
+     * 只要有一个文件被占用就 Abort（静默模式什么都不显示）—— 应用已经关了，用户就卡在
+     * "更新完什么都没出现"。这条判断是为了让这种事发生时**至少说清原因**。
      */
-    const child = spawn(dest, ['/S', '--updated', '--force-run'], {
+    if (dataRootInsideInstallDir()) {
+      throw new Error(
+        '数据目录还在安装目录里面（' +
+          dataRoot() +
+          '）。这种布局下升级会被安装器中断，且可能连带删掉版本池与桌面端。\n' +
+          '请先在「设置 → 版本位置」把数据目录指到安装目录之外（或运行 scripts/migrate-data.mjs），再更新。'
+      )
+    }
+
+    /*
+     * 参数见文件头。`detached` + `unref`：安装器要活得比我们久 ——
+     * 我们马上强制退出，它得继续把文件替完。
+     */
+    const child = spawn(dest, INSTALLER_ARGS, {
       detached: true,
       stdio: 'ignore',
       windowsHide: true
     })
     child.unref()
-
-    // 安装器起不来（被杀软拦下、文件损坏）时别让界面干等：报出来
-    await new Promise<void>((resolve, reject) => {
-      child.once('error', (error) => reject(new Error(`无法启动安装程序：${error.message}`)))
-      // 给它一点时间起来；起得来就认为成功（之后我们退出，由它接手）
-      setTimeout(resolve, 1500)
-    })
+    appendUpdateLog(`已启动安装器 pid=${child.pid ?? '?'} 参数=${INSTALLER_ARGS.join(' ')}`)
 
     /*
-     * 稍等一下再退 —— 让安装器进程真正跑起来。
-     * 它带 `--updated`，会等我们退出（NSIS 模板里对 isUpdated 有 Sleep 1000 的宽限），
-     * 所以这个顺序是安全的：我们退出 → 它替换文件 → `--force-run` 把我们重新拉起。
+     * 确认安装器**真的接手了**才退出自己。
+     *
+     * 原来只监听 `error`、然后固定等 1500ms 就 quit —— 安装器立刻失败退出（被杀软拦下、
+     * 或 NSIS 的 `Abort`）时我们照样退，于是"应用关了，却没有任何东西回来"。
+     * 现在给 3 秒观察窗：期间它非零退出 = 失败，**不退**，把原因报给界面。
      */
-    setTimeout(() => app.quit(), 300)
+    const started = await new Promise<boolean>((resolve) => {
+      let settled = false
+      const done = (value: boolean, why: string): void => {
+        if (settled) return
+        settled = true
+        appendUpdateLog(why)
+        resolve(value)
+      }
+      child.once('error', (error: Error) => done(false, `安装器启动失败：${error.message}`))
+      child.once('exit', (code: number | null) =>
+        done(code === 0, `安装器在观察窗内退出，code=${code ?? '-'}`)
+      )
+      setTimeout(() => done(true, '观察窗内安装器仍在运行 → 认为已接手'), 3000)
+    })
+
+    if (!started) {
+      installing = false
+      throw new Error(
+        `安装程序没能接手（可能被杀毒软件拦下，或安装被中断）。\n` +
+          `安装包还在：${dest}\n可以直接双击它手动安装。\n详细日志：${updateLogPath()}`
+      )
+    }
+
+    /*
+     * **确定性地退出**，不再依赖 `app.quit()`。
+     *
+     * `app.quit()` 是"请求退出"：会被窗口的 close 拦截、被未释放的句柄拖住，
+     * 而安装器正等着我们腾出文件。`app.exit(0)` 直接终止进程，不留悬念。
+     * 代价是 `before-quit` 不会触发，所以清理要在这里自己做。
+     */
+    setTimeout(() => {
+      try {
+        stopAllSync()
+      } catch {
+        // 收尾失败也要退：安装器在等文件
+      }
+      try {
+        destroyTray()
+      } catch {
+        // 同上
+      }
+      appendUpdateLog('启动器退出，交给安装器')
+      app.exit(0)
+    }, 400)
   } catch (cause) {
     installing = false
     throw cause

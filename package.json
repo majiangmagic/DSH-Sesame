@@ -1,6 +1,6 @@
 {
   "name": "dsh-sesame",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "description": "DSH-Sesame —— dsh 的桌面启动器（Electron + Vue 3 + TypeScript）",
   "author": "DSH-Sesame",
@@ -16,6 +16,7 @@
     "smoke:market": "node scripts/smoke-market.mjs",
     "check:graph": "node scripts/check-import-graph.mjs",
     "check:target": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-plugin-target.mjs",
+    "migrate:data": "node scripts/migrate-data.mjs",
     "check:mirror": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-desktop-mirror.mjs",
     "check:update": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-update.mjs",
     "bundle:node": "node scripts/bundle-node.mjs",

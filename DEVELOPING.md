@@ -30,6 +30,7 @@ npm run release
 | `npm run typecheck` | tsc（主进程）+ vue-tsc（渲染层） |
 | `npm run check:graph` | 导入图自检：循环依赖 + 分层越界（加 `-- --list` 可列出全部领域间依赖边） |
 | `npm run check:target` | 插件**安装目标解析**自检：目录条目 → npm / Release 产物 / `github:owner/repo`（加 `-- --live` 再报一次真实目录的分布） |
+| `npm run migrate:data` | 把数据目录从**安装目录里**搬到隔壁（预演；加 `-- --apply` 才执行）。装新版前若数据还在安装目录里，必须先跑 |
 | `npm run check:mirror` | 打印桌面端 profile 与 web profile 的**插件差异**（启动桌面端时**无条件**把桌面端重建为 web 的样子） |
 | `npm run pack` | 只出免安装目录 `<发布目录>\_stage\win-unpacked` |
 | `npm run dist` | 出安装包到 `_stage\`（不发布） |

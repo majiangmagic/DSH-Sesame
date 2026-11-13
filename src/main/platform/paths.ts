@@ -1,5 +1,5 @@
-﻿import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { dirname, join, resolve, sep } from 'node:path'
 import { app } from 'electron'
 import { readSettings } from './settings'
 
@@ -23,13 +23,21 @@ export function appDir(): string {
 }
 
 /**
- * 数据根目录（版本池、快照都放这里）。
+ * 数据根目录（版本池、快照、桌面端都放这里）。
  *
- * **刻意放在软件目录下**，而不是应用目录里面：
- * 覆盖安装/卸载时 NSIS 会把安装目录整个删掉 —— 本会话实测过，
- * 用户的 1.1 GB 版本池就是这么没的 —— 所以安装脚本里补了保护（见 build/installer.nsh）。
+ * **必须放在安装目录外面** —— 这是踩出来的，代价是一条完整的更新链路：
  *
- * 优先级：`SESAME_DATA_DIR` 环境变量 > 便携版自己那 > 软件目录下。
+ *   NSIS 的升级流程（`app-builder-lib/templates/nsis/uninstaller.nsh:164-187`）在
+ *   `isUpdated` 时会先把 `$INSTDIR` 里**每一项逐个改名**到 `%TEMP%\old-install`，
+ *   再 `RMDir /r $INSTDIR`。只要有一个文件被占用，它就 `Abort`（静默模式下什么都不显示），
+ *   安装器直接退出 —— 而此时启动器已经关掉了，于是"更新完什么都没出现"。
+ *
+ *   实测：数据曾默认放在安装目录里，`dsh/` 1.1 GB + `desktop/` 1.3 GB，
+ *   且 `desktop/<版本>/app` 正在被运行中的桌面端锁着 → 升级必然改名失败 → 必然 Abort。
+ *
+ * 所以默认值是**安装目录的隔壁**（同盘 rename，瞬间完成；也不在任何安装器的清理范围里）。
+ *
+ * 优先级：设置页的 `poolDir` > `SESAME_DATA_DIR` > 便携版自己那 > 安装目录隔壁。
  */
 export function dataRoot(): string {
   // 设置页里指定的优先（用户可改到别的盘）
@@ -45,15 +53,26 @@ export function dataRoot(): string {
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR
   if (portableDir) return portableDir
 
-  return appDir()
+  // 安装目录的**隔壁**，例如 D:\DSH-Sesame → D:\DSH-Sesame-data
+  return join(dirname(appDir()), 'DSH-Sesame-data')
+}
+
+/** 数据根是否与安装目录重叠（重叠就意味着升级会被 NSIS 的改名步骤卡住 / 数据被删） */
+export function dataRootInsideInstallDir(): boolean {
+  const root = dataRoot()
+  const install = appDir()
+  return root === install || root.startsWith(install + sep)
 }
 
 /**
- * 一次性迁移：把旧位置（应用目录里）的 dsh 池与 snapshots 搬到新的数据根目录。
+ * 一次性迁移：把旧位置（安装目录里）的 dsh 池、桌面端与 snapshots 搬到新的数据根目录。
  *
  * 只在"新位置还没有、旧位置存在"时搬，搬完返回一行说明（主进程写日志）。
  * 同盘用 rename（瞬间完成，1 GB 也是瞬间）；跨盘退回复制。
  * **失败不阻断启动** —— 新位置会是空的，但旧的仍在原地，数据没丢。
+ *
+ * `desktop` 必须一起搬：它是解压出来的官方桌面端（1 GB 量级），留在安装目录里
+ * 既会被升级删掉，也是升级卡死的直接原因（文件正被运行中的桌面端占用）。
  */
 export function migrateLegacyData(): string | null {
   const target = dataRoot()
@@ -61,7 +80,7 @@ export function migrateLegacyData(): string | null {
   if (target === legacyBase) return null
 
   const moved: string[] = []
-  for (const name of ['dsh', 'snapshots']) {
+  for (const name of ['dsh', 'desktop', 'snapshots']) {
     const from = join(legacyBase, name)
     const to = join(target, name)
     if (!existsSync(from) || existsSync(to)) continue
