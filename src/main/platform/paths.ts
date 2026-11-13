@@ -27,15 +27,18 @@ export function appDir(): string {
  *
  * **必须放在安装目录外面** —— 这是踩出来的，代价是一条完整的更新链路：
  *
- *   NSIS 的升级流程（`app-builder-lib/templates/nsis/uninstaller.nsh:164-187`）在
- *   `isUpdated` 时会先把 `$INSTDIR` 里**每一项逐个改名**到 `%TEMP%\old-install`，
- *   再 `RMDir /r $INSTDIR`。只要有一个文件被占用，它就 `Abort`（静默模式下什么都不显示），
- *   安装器直接退出 —— 而此时启动器已经关掉了，于是"更新完什么都没出现"。
+ *   NSIS 的升级流程（`app-builder-lib/templates/nsis/uninstaller.nsh:160-188`）在
+ *   `isUpdated` 时会先 `atomicRMDir`：把 `$INSTDIR` 里**每一项逐个**改名搬到
+ *   `%TEMP%\old-install`，然后 `RMDir /r $INSTDIR` 再装新版。
  *
- *   实测：数据曾默认放在安装目录里，`dsh/` 1.1 GB + `desktop/` 1.3 GB，
- *   且 `desktop/<版本>/app` 正在被运行中的桌面端锁着 → 升级必然改名失败 → 必然 Abort。
+ *   数据放在安装目录里时，这一步要把 `dsh/` + `desktop/` 一起搬走。实测那次
+ *   `%TEMP%\old-install` 里留下了 274,529 个文件、10.05 GB（连 `chrome_*.pak` 这种
+ *   应用本体文件都在），而 **D: 到 C: 是跨盘** —— 不是改名，是实打实复制。
+ *   搬完之后安装器就没下文了：应用已关、窗口不再出现、进程挂着不动。
+ *   那次升级因此彻底失败，10 GB 一直躺在 %TEMP% 里没被清理。
  *
  * 所以默认值是**安装目录的隔壁**（同盘 rename，瞬间完成；也不在任何安装器的清理范围里）。
+ * 另外 `build/installer.nsh` 覆盖了删文件步骤，让升级不再搬空 `$INSTDIR`。
  *
  * 优先级：设置页的 `poolDir` > `SESAME_DATA_DIR` > 便携版自己那 > 安装目录隔壁。
  */

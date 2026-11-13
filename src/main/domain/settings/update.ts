@@ -358,16 +358,19 @@ export async function installLauncherUpdate(
     onProgress({ phase: 'install', text: '正在启动安装程序…应用会退出并自动重启', percent: null })
 
     /*
-     * 数据目录与安装目录重叠时**不敢装**：NSIS 升级会先把 $INSTDIR 逐个改名搬走，
-     * 只要有一个文件被占用就 Abort（静默模式什么都不显示）—— 应用已经关了，用户就卡在
-     * "更新完什么都没出现"。这条判断是为了让这种事发生时**至少说清原因**。
+     * 数据目录与安装目录重叠时**不敢装**。
+     *
+     * NSIS 升级会先把 `$INSTDIR` 里每一项搬到 `%TEMP%\old-install`（跨盘 = 复制），
+     * 再整目录删除。数据在里面时这一步要搬 GB 级内容 —— 实测把安装器拖死了：
+     * 应用已关、窗口不再出现、10 GB 留在 %TEMP% 里没清理。
+     * 这里提前拦住，把原因说清楚，而不是让用户再经历一次"点了更新就没了"。
      */
     if (dataRootInsideInstallDir()) {
       throw new Error(
         '数据目录还在安装目录里面（' +
           dataRoot() +
-          '）。这种布局下升级会被安装器中断，且可能连带删掉版本池与桌面端。\n' +
-          '请先在「设置 → 版本位置」把数据目录指到安装目录之外（或运行 scripts/migrate-data.mjs），再更新。'
+          '）。这种布局下升级会把整个数据目录搬到 %TEMP%，既慢又可能中途失败。\n' +
+          '请先运行 `npm run migrate:data -- --apply`（在源码目录里），或在「设置 → 版本位置」把数据目录指到安装目录之外，再更新。'
       )
     }
 

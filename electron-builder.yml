@@ -1,4 +1,4 @@
-﻿appId: com.dsh.sesame
+appId: com.dsh.sesame
 productName: DSH-Sesame
 copyright: DSH-Sesame
 
@@ -46,3 +46,8 @@ nsis:
   createStartMenuShortcut: true
   shortcutName: DSH-Sesame
   artifactName: DSH-Sesame-Setup-${version}.${ext}
+  # 覆盖升级时的删文件步骤：只删应用自身的文件，**不搬空 $INSTDIR**。
+  # 默认流程会把 $INSTDIR 里每一项改名搬到 %TEMP% 再整目录删除 —— 旧版本把版本池与
+  # 解压出来的桌面端放在安装目录里，那意味着跨盘搬 10 GB，实测把安装器拖死。
+  # 完整说明见 build/installer.nsh。
+  include: build/installer.nsh
