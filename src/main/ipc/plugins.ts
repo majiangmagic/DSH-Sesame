@@ -13,9 +13,9 @@ import {
 import { installPlugin, uninstallPlugin, updatePlugin } from '../domain/plugins/pluginInstall'
 import { listPlugins, setPluginEnabled } from '../domain/plugins/pluginState'
 import { withPluginWriteLock } from '../domain/plugins/serialize'
+import { autoSnapshotBefore } from '../domain/plugins/guard'
 import { baseStatus, initBaseFromProfile, type BaseSource } from '../domain/control/pluginBase'
 // "改 profile 前先自动存档"是一条业务规则，住在 domain 里（见那个文件的注释）
-import { autoSnapshotBefore } from '../domain/plugins/guard'
 
 /**
  * 插件页 + 内置市场库的 IPC。
@@ -123,7 +123,8 @@ export function registerPluginsIpc(): void {
     pushTagged('启动器', `安装插件 ${packageName}`)
     // 装 / 卸 / 更都动 `package.json` 与 `node_modules`，必须排进同一个串行队列
     await runLogged(`安装 ${packageName} `, async () => {
-      await autoSnapshotBefore('安装插件 ' + packageName)
+        // 操作前先存一份：装/卸/更新都会改母版，出问题时这份是唯一的退路。
+        await autoSnapshotBefore('安装插件 ' + packageName)
       await installPlugin(packageName, pluginProgress(event, packageName))
     })
     pushTagged('启动器', `${packageName} 安装完成`)
@@ -132,8 +133,8 @@ export function registerPluginsIpc(): void {
   ipcMain.handle(PLUGIN_CHANNELS.uninstall, async (event: IpcMainInvokeEvent, packageName: string) => {
     if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
     pushTagged('启动器', `卸载插件 ${packageName}`)
+        await autoSnapshotBefore('卸载插件 ' + packageName)
     await runLogged(`卸载 ${packageName} `, async () => {
-      await autoSnapshotBefore('卸载插件 ' + packageName)
       await uninstallPlugin(packageName, pluginProgress(event, packageName))
     })
     pushTagged('启动器', `${packageName} 已卸载`)
@@ -148,8 +149,8 @@ export function registerPluginsIpc(): void {
       if (typeof packageName !== 'string' || packageName === '') throw new Error('缺少插件包名')
       if (typeof target !== 'string' || target === '') throw new Error('缺少目标版本')
       pushTagged('启动器', `更新插件 ${packageName} → ${target}`)
-      await runLogged(`更新 ${packageName} `, async () => {
         await autoSnapshotBefore('升级插件 ' + packageName)
+      await runLogged(`更新 ${packageName} `, async () => {
         await updatePlugin(packageName, target, pluginProgress(event, packageName))
       })
       pushTagged('启动器', `${packageName} 已更新到 ${target}`)

@@ -29,7 +29,7 @@
  * · 不修改插件包里的任何文件（母版里只允许原始文件）
  */
 import { spawn } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createStreamDecoder } from '../../platform/textDecode'
 import { requireNode, bundledPnpmScript, pathWithBundledBin } from '../../platform/runtime'
@@ -38,6 +38,42 @@ export interface PnpmOutcome {
   code: number
   /** 最后若干行输出（失败时给用户看） */
   tail: string[]
+}
+
+/**
+ * 修正 `node_modules/.modules.yaml` 里指向**源 profile** 的虚拟存储路径。
+ *
+ * 母版是从某个 profile **整目录复制**来的，pnpm 元数据跟着过来了，里面记着：
+ *
+ *     "storeDir":        "C:\\Users\\…\\pnpm\\store\\v11"
+ *     "virtualStoreDir": "C:\\Users\\…\\.dsh\\profiles\\desktop\\node_modules\\.pnpm"
+ *
+ * 之后任何 `pnpm add/remove` 都会核对这两条与当前目录是否一致：
+ *
+ *     [ERR_PNPM_UNEXPECTED_STORE]         Unexpected store location
+ *     [ERR_PNPM_UNEXPECTED_VIRTUAL_STORE] Unexpected virtual store location
+ *
+ * **实测每次都是 1.1 秒失败退出** —— 所以"更新卡死"不是卡，是 pnpm 立刻报错，
+ * 而错误落在 stderr 里没被看到。
+ *
+ * - `storeDir` 保持原值（那个 store 还在，可复用缓存；`runPnpm` 会显式传 `--store-dir`）
+ * - `virtualStoreDir` **必须改成本目录自己的** `node_modules/.pnpm`，
+ *   否则 pnpm 会往源 profile 里写，等于污染另一个 profile
+ *
+ * 幂等：一致时什么都不做，也不写盘。
+ */
+function normalizeModulesYaml(dir: string): void {
+  const file = join(dir, 'node_modules', '.modules.yaml')
+  if (!existsSync(file)) return
+  const want = join(dir, 'node_modules', '.pnpm')
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+    if (parsed['virtualStoreDir'] === want) return
+    parsed['virtualStoreDir'] = want
+    writeFileSync(file, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8')
+  } catch {
+    // 读不懂就别动：改坏元数据比留着旧值更糟
+  }
 }
 
 /**
@@ -112,6 +148,9 @@ export function runPnpm(
      * 拒绝操作（`ERR_PNPM_UNEXPECTED_STORE`）。这条与具体机器无关：任何把数据目录
      * 放在与 `~/.dsh` 不同盘的用户都会中招。
      */
+    // 母版可能是从别的 profile 复制来的：先修好 pnpm 的虚拟存储路径，否则它直接拒绝
+    normalizeModulesYaml(dir)
+
     const store = storeDirOf(dir)
     const argv = store === null ? pnpmArgs(args) : [...pnpmArgs(args), `--store-dir=${store}`]
 
