@@ -54,9 +54,7 @@ async function pick(source: PluginBaseSource): Promise<void> {
         </div>
       </div>
 
-      <!-- 只有这一句是真的"警告"（说了不能跳过），所以只有它用 confirm-risk 的红样式 -->
-      <p class="confirm-risk">{{ t('baseSetup.noSkip') }}</p>
-      <p v-if="error" class="confirm-risk">{{ error }}</p>
+      <p v-if="error" class="confirm-error">{{ error }}</p>
 
       <div class="confirm-actions">
         <button type="button" class="main-button" :disabled="busy !== ''" @click="pick('web')">

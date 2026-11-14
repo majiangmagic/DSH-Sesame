@@ -1188,10 +1188,23 @@ nav button.view-active {
   margin: 11px 0 0;
   padding: 10px 12px;
   border-radius: 10px;
-  background: #fff1f4;
-  color: #8f2038;
+  /*
+   * 暗色主题：原来是**硬编码浅色**（#fff1f4 底 / #8f2038 字），在深色卡片里就是一块
+   * 刺眼的粉色。改成半透明红底 + 提亮的红字，明暗两套都能读。
+   */
+  background: rgba(225, 29, 72, 0.14);
+  color: #ff9db0;
   font-size: 12.5px;
   line-height: 1.55;
+}
+
+/* 弹窗里的错误提示：只在出错时出现，比 confirm-risk 更轻（不要整块底色） */
+.confirm-error {
+  margin: 10px 0 0;
+  color: #ff9db0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 /* 更新与暂不更新并排：首页的 .main-button 是通栏主按钮，这里要按内容收窄 */
