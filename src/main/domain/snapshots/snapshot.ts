@@ -113,13 +113,33 @@ export function snapshotRoot(): string {
  * 首次在新版本里打开时 `base` 还不存在、而旧版留下的 `web` 里可能有历史快照 ——
  * 那种情况沿用 `web`，用户不会觉得"快照全没了"。
  */
+/**
+ * 该用哪个子目录存/列快照。
+ *
+ * `base` 只有在**真的装着有效快照**时才用它 —— 不是"目录存在就用"。
+ *
+ * 踩过的坑：一次 tar 失败会留下 `snapshots/base/<stamp>/`（只有配置文件、没有
+ * manifest.json）。这个空壳一旦存在，这里就切到 `base`，而列表读 `base` 读不到东西
+ * → **用户看到"快照列表是空的"，其实 10 份历史都在 `web` 里**。
+ */
 function scopeDir(): string {
   const root = snapshotRoot()
   const current = join(root, SNAPSHOT_SCOPE)
-  if (existsSync(current)) return current
+  if (hasUsableSnapshot(current)) return current
   const legacy = join(root, LEGACY_SCOPE)
-  if (existsSync(legacy)) return legacy
+  if (hasUsableSnapshot(legacy)) return legacy
   return current
+}
+
+/** 目录里至少有一份带 manifest.json 的快照才算"可用" */
+function hasUsableSnapshot(dir: string): boolean {
+  try {
+    return readdirSync(dir, { withFileTypes: true }).some(
+      (entry) => entry.isDirectory() && existsSync(join(dir, entry.name, 'manifest.json'))
+    )
+  } catch {
+    return false
+  }
 }
 
 /** 快照覆盖的**源目录**：插件母版（未初始化时落到默认母版路径，由调用方给出可读报错） */
@@ -250,10 +270,40 @@ async function tarCreate(profileDirPath: string, outFile: string): Promise<void>
      * 表现就是"快照永远打不完"（实测：命令行直接跑 17 秒，Electron 里跑两分钟
      * 还在转）。命令行能复现不了，因为那里 stdin 是控制台不是管道。
      */
-    const child = spawn('tar', ['-czf', outFile, '-C', profileDirPath, 'node_modules'], {
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
+    const child = spawn(
+      'tar',
+      [
+        '-cf',
+        outFile,
+        /*
+         * **zstd**，实测最快：
+         *
+         *   同一母版（476 MB / 29611 文件）
+         *   gzip 默认（-6）   19.1 秒 → 185 MB
+         *   gzip level 1       9.1 秒 → 200 MB
+         *   zstd               5.1 秒 → 175 MB   ← 用这个
+         *
+         * 又快又小。格式仍是单个 tar 压缩包（只是压缩算法从 gzip 变 zstd），
+         * 解压端用 `tar -xf`（bsdtar 按文件头自动识别），**新旧包都能解**。
+         */
+        '--zstd',
+        '-C',
+        profileDirPath,
+        'node_modules'
+      ],
+      {
+        windowsHide: true,
+        /*
+         * stdin 必须显式 **ignore**。
+         *
+         * 默认 spawn 会给 stdin 一条**打开的管道**。bsdtar 在 stdin 不是终端时会认为
+         * "可能要从管道读输入"，于是压完不退出、一直等 EOF —— 在启动器里表现就是
+         * "快照永远打不完"，产物停在 0 字节（实测用户机器上就是这样）。
+         * 命令行能复现不了：那里 stdin 是控制台，不是管道。
+         */
+        stdio: ['ignore', 'pipe', 'pipe']
+      }
+    )
     let err = ''
     child.stderr?.on('data', (b: Buffer) => { err += String(b) })
     child.on('error', reject)
@@ -266,9 +316,18 @@ async function tarCreate(profileDirPath: string, outFile: string): Promise<void>
 
 /** 把 tgz 解回 profile 目录（同名覆盖） */
 async function tarExtract(file: string, intoDir: string): Promise<void> {
-  // 同上：解包也可能几十秒，绝不能阻塞主进程
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('tar', ['-xzf', file, '-C', intoDir], { windowsHide: true })
+    /*
+     * `-xf` 而**不是** `-xzf`：bsdtar 会按文件头自动识别压缩格式。
+     *
+     * 快照现在用 zstd 压（见 tarCreate），但硬盘上还有旧的 gzip 包 ——
+     * `-xzf` 会把 zstd 包当成坏的 gzip 直接报错，`-xf` 两种都能解。
+     */
+    const child = spawn('tar', ['-xf', file, '-C', intoDir], {
+      windowsHide: true,
+      // 同 tarCreate：stdin 必须关掉，否则可能等 EOF 不退出
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
     let err = ''
     child.stderr?.on('data', (b: Buffer) => { err += String(b) })
     child.on('error', reject)

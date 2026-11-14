@@ -3,7 +3,7 @@ import { createStreamDecoder } from '../../platform/textDecode'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { versionBin, versionDir } from '../../platform/paths'
-import { bundledNode, bundledPnpmScript, requireNode } from '../../platform/runtime'
+import { bundledNode, bundledPnpmScript } from '../../platform/runtime'
 import { registryUrl } from '../../platform/registry'
 import { currentRun } from '../control/runner'
 import { VERSION_RE } from './versions'
@@ -36,18 +36,6 @@ function isRunning(version: string): boolean {
 }
 
 /** 在 PATH 里找一个可执行文件（Windows 试 .exe/.cmd/.bat，其它平台试原名）。 */
-function findOnPath(name: string): string | null {
-  const dirs = (process.env.PATH ?? '').split(process.platform === 'win32' ? ';' : ':')
-  const suffixes = process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : ['']
-  for (const dir of dirs) {
-    if (!dir) continue
-    for (const suffix of suffixes) {
-      const candidate = join(dir, name + suffix)
-      if (existsSync(candidate)) return candidate
-    }
-  }
-  return null
-}
 
 interface NpmCommand {
   file: string
@@ -71,46 +59,26 @@ interface NpmCommand {
  *   4. PATH 上的 npm
  */
 function resolveNpm(): NpmCommand | { error: string } {
+  /*
+   * **锁死内置运行时**（用户要求）：只用随包发布的 node + pnpm，完全不看 PATH。
+   *
+   * 理由：PATH 上的 node/npm 版本不可控 —— 实测有机器上的 node 不接受
+   * `--use-system-ca`（dsh 直接起不来），也有机器上 PATH 里的 npm 缺失或形状怪异。
+   * 既然包里带了运行时，就不该把"能不能装"交给用户环境。
+   *
+   * 内置 pnpm 装 dsh 时已固定 `--config.dangerouslyAllowAllBuilds=true`，
+   * 否则 pnpm 会因为"有被忽略的构建脚本"返回退出码 1（`node-pty` 需要编译）。
+   */
   const bundled = bundledNode()
-  const pathNode = findOnPath('node')
-
-  /** 某个 node 旁边有没有 npm 的入口脚本 */
-  const npmCliBeside = (nodePath: string | null): string | null => {
-    if (nodePath === null) return null
-    const cli = join(dirname(nodePath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
-    return existsSync(cli) ? cli : null
-  }
-
   const pnpmScript = bundledPnpmScript()
-
-  // 1) 内置 node + PATH 上的 npm（布局不变，最理想）
-  const pathCli = npmCliBeside(pathNode)
-  if (bundled !== null && pathCli !== null) return { file: bundled, cli: pathCli }
-
-  // 2) 内置 node + 内置 pnpm
-  if (bundled !== null && pnpmScript !== null) return { file: bundled, cli: pnpmScript, via: 'pnpm' }
-
-  // 3) PATH 上的 node + 同级 npm-cli.js
-  if (pathNode !== null && pathCli !== null) return { file: pathNode, cli: pathCli }
-
-  // 4) PATH 上的 npm
-  const npm = findOnPath('npm')
-  if (npm) return { file: npm, cli: null }
-
-  // 5) 只剩内置 pnpm（理论上被第 2 条覆盖，留作兜底）
-  if (pnpmScript !== null) {
-    try {
-      const runtime = requireNode()
-      return { file: runtime.path, cli: pnpmScript, via: 'pnpm' }
-    } catch {
-      // 掉到下面的错误
-    }
+  if (bundled !== null && pnpmScript !== null) {
+    return { file: bundled, cli: pnpmScript, via: 'pnpm' }
   }
 
   return {
     error:
-      '找不到可用的包管理器：内置运行时缺失，PATH 上也没有 node/npm。\n' +
-      '请重新安装 DSH-Sesame（安装包自带 node 与 pnpm）。'
+      '内置运行时缺失（安装目录下找不到 node/pnpm），无法下载 dsh 版本。\n' +
+      '请重新安装 DSH-Sesame —— 安装包自带 node 与 pnpm。'
   }
 }
 
@@ -240,6 +208,20 @@ export async function installVersion(
           '--prod',
           '--config.node-linker=hoisted',
           '--config.minimumReleaseAge=0',
+          /*
+           * **必须允许构建脚本。**
+           *
+           * dsh 的依赖里有几个带安装期脚本的：`node-pty`（终端，要编译原生 .node）、
+           * `@deepseek-ai/dsh-subprocess-local`（postinstall 生成 spawn helper）、
+           * `koffi` / `protobufjs` / `@google/genai`（preinstall）。
+           *
+           * pnpm 默认一个都不跑，装完发现"有被忽略的构建"就**返回退出码 1**
+           * （`ERR_PNPM_IGNORED_BUILDS`）。启动器把它当失败，把整个目录删掉 ——
+           * 表现就是"下载 dsh 永远失败"，而其实包已经装完了。
+           *
+           * 实测加上这一条：exit 0，dsh 0.2.2-rc.3 就位，`node-pty` 的 pty.node 也编译出来了。
+           */
+          '--config.dangerouslyAllowAllBuilds=true',
           '--reporter=append-only'
         ]
       : [

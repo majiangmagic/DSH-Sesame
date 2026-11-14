@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { delimiter, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { app } from 'electron'
 
 /**
@@ -27,19 +27,6 @@ import { app } from 'electron'
 export interface NodeRuntime {
   path: string
   kind: 'env' | 'path' | 'bundled'
-}
-
-/** PATH 里逐个目录找 node.exe / node */
-function findOnPath(): string | null {
-  const exts = process.platform === 'win32' ? ['.exe', '.cmd', ''] : ['']
-  for (const dir of (process.env['PATH'] ?? '').split(delimiter)) {
-    if (dir.trim() === '') continue
-    for (const ext of exts) {
-      const candidate = join(dir, `node${ext}`)
-      if (existsSync(candidate)) return candidate
-    }
-  }
-  return null
 }
 
 /** 自带运行时：<app>/node/node.exe（打包后即 exe 旁边的 node/） */
@@ -145,25 +132,22 @@ function probe(path: string): string | null {
 
 /** 找可用的 Node；找不到返回 null。 */
 export function resolveNode(): (NodeRuntime & { version: string }) | null {
+  /*
+   * **锁死内置运行时**（用户要求）：只用随包发布的那个 node，不再回退到 PATH。
+   *
+   * 原来还有一条"PATH 上的 node"兜底，但那条永远不该被走到 —— 它带来的是不可控：
+   * 实测有机器上的 node 不接受 `--use-system-ca`，dsh 整个起不来；
+   * 也有 Microsoft Store 版的转发壳，形状像 node 但其实不是。
+   *
+   * 保留 `SESAME_NODE` 环境变量：那是给调试用的显式覆盖，不是"用户环境碰巧有什么"。
+   */
   const candidates: Array<{ path: string; kind: NodeRuntime['kind'] }> = []
 
-  /*
-   * 顺序：**显式指定 → 自带 → PATH**。
-   *
-   * 自带那个必须排在 PATH 之前：它是随包发布的、我们验证过的 v24.19.0；而用户机器上 PATH 里
-   * 是哪个版本完全不可控 —— 实测有台新机器就因为 PATH 里那个不接受 --use-system-ca，
-   * 整个 dsh 起不来。自带运行时存在的**全部意义**就是"不依赖用户机器"，把它排最后等于白带。
-   *
-   * 三者都是**候选**：探测不过就换下一个（见 probe）。不会因为"你指定了"就死给用户看。
-   */
   const fromEnv = process.env['SESAME_NODE']
   if (fromEnv && existsSync(fromEnv)) candidates.push({ path: fromEnv, kind: 'env' })
 
   const bundled = bundledNode()
   if (bundled) candidates.push({ path: bundled, kind: 'bundled' })
-
-  const onPath = findOnPath()
-  if (onPath) candidates.push({ path: onPath, kind: 'path' })
 
   for (const candidate of candidates) {
     const version = probe(candidate.path)
