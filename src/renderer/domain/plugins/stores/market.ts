@@ -244,9 +244,32 @@ export const useMarketStore = defineStore('market', () => {
   const hidden = computed(() => Math.max(0, filtered.value.length - pageSize.value))
   const canLoadMore = computed(() => hidden.value > 0)
 
+  /**
+   * 只刷新「已装」状态，不重拉目录。
+   *
+   * 为什么必须单独有这个：目录（10974 条）可以长期缓存，但**已装状态会变** ——
+   * 母版刚初始化、刚装/卸/克隆完，都要重新读。原先 `load()` 里
+   * `if (loaded.value && !force) return` 会把「母版还没建时读到 0 个」这个结果一直
+   * 缓存下去，用户建好母版回来仍显示"已装 0"，看起来像插件全丢了。
+   */
+  async function refreshInstalled(): Promise<void> {
+    try {
+      const plugins = await api.getPlugins()
+      installedNames.value = new Set(plugins.plugins.map((plugin) => plugin.name.toLowerCase()))
+      installedVersions.value = new Map(plugins.plugins.map((plugin) => [plugin.name.toLowerCase(), plugin.version]))
+      installedPlugins.value = plugins.plugins
+    } catch {
+      // 读不到（母版还没初始化 / 目录被占用）就保持现状，不要把已有状态清空
+    }
+  }
+
   async function load(force = false): Promise<void> {
     if (loading.value) return
-    if (loaded.value && !force) return
+    if (loaded.value && !force) {
+      // 目录不用重拉，但「已装」必须重读 —— 否则母版初始化后看不到自己的插件
+      await refreshInstalled()
+      return
+    }
     loading.value = true
     error.value = ''
     try {
@@ -552,6 +575,7 @@ export const useMarketStore = defineStore('market', () => {
     unlistedInstalled,
     filtered,
     visible,
+    refreshInstalled,
     hidden,
     canLoadMore,
     load,
