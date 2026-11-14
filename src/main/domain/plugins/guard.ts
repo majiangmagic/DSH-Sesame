@@ -19,8 +19,22 @@ import { pushTagged } from '../terminal/logbus'
  * 搬到 infra 反而会把这个策略的意图藏起来。
  */
 export async function autoSnapshotBefore(reason: string): Promise<void> {
+  /*
+   * **先说话再干活。**
+   *
+   * 这一步要遍历三万个文件算指纹、必要时再打包 180 MB，实测几十秒。它排在
+   * 装/卸/更新之前，而原先**一句日志都不打** —— 用户点了更新，终端停在
+   * "安装插件 X"，界面按钮一直转，看起来就是卡死。实际是在打快照。
+   */
+  pushTagged('启动器', `正在自动快照（${reason}）…需要几十秒，请稍候`)
   try {
-    await createSnapshot('auto', reason)
+    const entry = await createSnapshot('auto', reason)
+    pushTagged(
+      '启动器',
+      entry.reused === true
+        ? '快照内容与上一份相同，已跳过打包'
+        : `自动快照完成（${Math.round(entry.bytes / 1024 / 1024)} MB）`
+    )
   } catch (cause) {
     pushTagged(
       '启动器',

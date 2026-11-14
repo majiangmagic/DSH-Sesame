@@ -40,6 +40,43 @@ export interface PnpmOutcome {
   tail: string[]
 }
 
+/**
+ * 读 profile 的 `node_modules/.modules.yaml` 里记录的 **store 位置**。
+ *
+ * pnpm 会把"这套 node_modules 是从哪个 store 链接过来的"写在这里，之后每次
+ * install/add 都要核对。母版是从某个 profile **复制**来的，那段记录跟着过来了；
+ * 一旦母版换了盘符（例如从 C 盘的 `~/.dsh` 复制到 D 盘的数据目录），pnpm 就会
+ * 认为该换成本盘的 store 并直接拒绝：
+ *
+ *     [ERR_PNPM_UNEXPECTED_STORE] Unexpected store location
+ *     The dependencies at "…\node_modules" are currently linked from the store at
+ *     "C:\Users\…\pnpm\store\v11". pnpm now wants to use the store at "D:\.pnpm-store\v11".
+ *
+ * 表现就是"点更新 → 按钮一直转 → 终端什么都不打"（其实是 1 秒内失败退出了）。
+ * 解决：把它原来用的 store 显式传回去，pnpm 就认这套 node_modules。
+ */
+function storeDirOf(dir: string): string | null {
+  try {
+    const text = readFileSync(join(dir, 'node_modules', '.modules.yaml'), 'utf8')
+
+    // pnpm 11 写的是 JSON（字段名带引号、Windows 路径是转义的 `\\`），
+    // 老版本可能是 YAML。先按 JSON 试，不成立再退回正则。
+    try {
+      const parsed = JSON.parse(text) as { storeDir?: unknown }
+      if (typeof parsed.storeDir === 'string' && parsed.storeDir !== '') return parsed.storeDir
+    } catch {
+      // 不是 JSON，走下面的正则
+    }
+
+    const match = text.match(/^["']?storeDir["']?\s*:\s*["']?(.+?)["']?\s*$/m)
+    if (match === null) return null
+    const value = match[1].trim()
+    return value === '' ? null : value.replace(/\\\\/g, '\\')
+  } catch {
+    return null
+  }
+}
+
 /** 装的/卸的目标：registry 包名、git 规格、tarball URL 都走这一个入口 */
 function pnpmArgs(args: string[]): string[] {
   return [
@@ -70,7 +107,15 @@ export function runPnpm(
   }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(node.path, [script, ...pnpmArgs(args)], {
+    /*
+     * 显式把 node_modules 原本用的 store 传回去，否则 pnpm 会因为"母版换了盘符"
+     * 拒绝操作（`ERR_PNPM_UNEXPECTED_STORE`）。这条与具体机器无关：任何把数据目录
+     * 放在与 `~/.dsh` 不同盘的用户都会中招。
+     */
+    const store = storeDirOf(dir)
+    const argv = store === null ? pnpmArgs(args) : [...pnpmArgs(args), `--store-dir=${store}`]
+
+    const child = spawn(node.path, [script, ...argv], {
       cwd: dir,
       windowsHide: true,
       env: {
