@@ -20,17 +20,26 @@ import { pushTagged } from '../terminal/logbus'
  */
 export async function autoSnapshotBefore(reason: string): Promise<void> {
   /*
-   * **先说话再干活。**
+   * **先说话，再持续说话。**
    *
-   * 这一步要遍历三万个文件算指纹、必要时再打包 180 MB，实测几十秒。它排在
-   * 装/卸/更新之前，而原先**一句日志都不打** —— 用户点了更新，终端停在
-   * "安装插件 X"，界面按钮一直转，看起来就是卡死。实际是在打快照。
+   * 这一步要递归遍历三万个文件算指纹，再 tar 压 185 MB。它排在装/卸/更新之前，
+   * 而 tar 本身**不产生任何输出** —— 用户盯着终端，几分钟一个字都没有，
+   * 只能认为卡死了。
+   *
+   * 所以除了开始/结束两行，中间每隔几秒报一次"已用 N 秒"，
+   * 让它明确表现为"在干活"而不是"死了"。
    */
   pushTagged('启动器', `正在自动快照（${reason}）…需要几十秒，请稍候`)
+  const started = Date.now()
+  const elapsed = (): number => Math.round((Date.now() - started) / 1000)
+  const ticker = setInterval(() => {
+    pushTagged('启动器', `快照进行中…已 ${elapsed()} 秒（三万个文件，正常要几十秒）`)
+  }, 5000)
+
   try {
     const entry = await createSnapshot('auto', reason)
     if (entry.reused === true) {
-      pushTagged('启动器', '快照内容与上一份相同，已跳过打包')
+      pushTagged('启动器', `快照内容与上一份相同，已跳过（${elapsed()} 秒）`)
       return
     }
     /*
@@ -41,11 +50,13 @@ export async function autoSnapshotBefore(reason: string): Promise<void> {
      * 看着像存了个空快照，实际压缩包有 185 MB。
      */
     const total = entry.modules?.bytes ?? entry.bytes
-    pushTagged('启动器', `自动快照完成（${Math.round(total / 1024 / 1024)} MB）`)
+    pushTagged('启动器', `自动快照完成（${Math.round(total / 1024 / 1024)} MB，用时 ${elapsed()} 秒）`)
   } catch (cause) {
     pushTagged(
       '启动器',
       '自动快照失败（不影响本次操作）：' + (cause instanceof Error ? cause.message : String(cause))
     )
+  } finally {
+    clearInterval(ticker)
   }
 }

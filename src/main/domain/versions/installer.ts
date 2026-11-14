@@ -133,7 +133,12 @@ function run(
     const child = spawn(command.file, finalArgs, {
       cwd: options.cwd,
       shell: useShell,
-      windowsHide: true
+      windowsHide: true,
+      /*
+       * stdin 必须 **ignore**：默认管道会让 npm/pnpm 认为可能要从 stdin 读输入，
+       * 遇到需要决定的情形就等 EOF —— 表现是"下载 dsh 版本永远不动"。
+       */
+      stdio: ['ignore', 'pipe', 'pipe']
       /*
        * 这里原本还关了一堆 npm 降噪开关（update_notifier / progress / audit / fund）。
        * 去掉了：它们是**纯装饰性**的，代价却是每次 spawn 都往子进程环境里塞四个变量，

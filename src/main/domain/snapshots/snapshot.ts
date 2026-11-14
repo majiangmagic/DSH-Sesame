@@ -242,7 +242,18 @@ async function tarCreate(profileDirPath: string, outFile: string): Promise<void>
    * 换成 spawn + Promise 后主进程只等事件，界面保持响应。
    */
   await new Promise<void>((resolve, reject) => {
-    const child = spawn('tar', ['-czf', outFile, '-C', profileDirPath, 'node_modules'], { windowsHide: true })
+    /*
+     * `stdio` 里 stdin 必须显式 **ignore**。
+     *
+     * 默认 `spawn` 会把 stdin 造成一条**打开的管道**。bsdtar 在 stdin 不是终端时
+     * 会认为"可能要从管道读输入"，于是压缩完不退出、一直等 EOF —— 在启动器里
+     * 表现就是"快照永远打不完"（实测：命令行直接跑 17 秒，Electron 里跑两分钟
+     * 还在转）。命令行能复现不了，因为那里 stdin 是控制台不是管道。
+     */
+    const child = spawn('tar', ['-czf', outFile, '-C', profileDirPath, 'node_modules'], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
     let err = ''
     child.stderr?.on('data', (b: Buffer) => { err += String(b) })
     child.on('error', reject)

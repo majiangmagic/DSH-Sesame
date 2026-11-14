@@ -157,6 +157,14 @@ export function runPnpm(
     const child = spawn(node.path, [script, ...argv], {
       cwd: dir,
       windowsHide: true,
+      /*
+       * stdin 必须 **ignore**。
+       *
+       * 默认 spawn 会给 stdin 一条打开的管道，pnpm 因此认为"可能要从管道读输入"，
+       * 遇到任何需要决定的情形就等 EOF —— 表现就是"点更新之后永远不动"。
+       * `CI=true` 只是让它不问问题，关掉 stdin 才是根治。
+       */
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         // 自带垫片追加到 PATH 末尾，让 pnpm 自己派生的子进程也找得到 node/pnpm
