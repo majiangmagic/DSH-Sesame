@@ -29,12 +29,19 @@ export async function autoSnapshotBefore(reason: string): Promise<void> {
   pushTagged('启动器', `正在自动快照（${reason}）…需要几十秒，请稍候`)
   try {
     const entry = await createSnapshot('auto', reason)
-    pushTagged(
-      '启动器',
-      entry.reused === true
-        ? '快照内容与上一份相同，已跳过打包'
-        : `自动快照完成（${Math.round(entry.bytes / 1024 / 1024)} MB）`
-    )
+    if (entry.reused === true) {
+      pushTagged('启动器', '快照内容与上一份相同，已跳过打包')
+      return
+    }
+    /*
+     * 报**整包的实际大小**，不是 `entry.bytes`。
+     *
+     * `entry.bytes` 只是那几个配置文件（package.json / cordis.patch.yml …）的总和，
+     * 几 KB 而已，除以 1024² 永远是 0 —— 之前这里打印"完成（0 MB）"，
+     * 看着像存了个空快照，实际压缩包有 185 MB。
+     */
+    const total = entry.modules?.bytes ?? entry.bytes
+    pushTagged('启动器', `自动快照完成（${Math.round(total / 1024 / 1024)} MB）`)
   } catch (cause) {
     pushTagged(
       '启动器',

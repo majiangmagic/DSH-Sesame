@@ -15,8 +15,27 @@
  *   1.1 GB 版本池就是这么丢的），而快照恰恰要在"出事时"还在。
  *
  * 回退语义：
- *   · 只写回文件。**回退前先自动存一份当前状态**（否则回退本身不可逆）。
+ *   · 只写回文件。
+ *   · **回退就是回退到已记录的那一刻，不新建任何快照。**（曾经在回退前顺手存一份
+ *     "pre-rollback"，结果每点一次回退列表里就多一条中间产物，10 份上限很快被它
+ *     填满，真正要保留的历史反而被挤掉 —— 用户明确禁止这个行为。）
  *   · 不自动跑 pnpm install —— node_modules 的同步是另一件事，界面上会说明。
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ⛔ **硬规则：快照必须是「全量压缩包」（单个 `modules.tgz`）。**
+ *
+ * 这是用户明确要求的设计，不是可以顺手优化的实现细节：
+ *
+ *   · **不允许**改成硬链接目录 / 软链接 / 增量 / 差异备份等任何"快照"形态。
+ *     （0.2.5 试过同盘硬链接，能省 20 秒 —— 但恢复路径完全没验证过，
+ *      等于把安全网换成了没测过的东西。用户当场否决。）
+ *   · **不允许**为了省时间去削弱"内容有没有变"的判断（见 `fingerprintOf`：
+ *     必须递归到每个文件的 size+mtime）。
+ *   · 慢是可以接受的：快照是出事时唯一的退路，正确性优先于速度。
+ *
+ * 下面 `restoreSnapshot` 里对 `modules.dir` 的读取**只为兼容** 0.2.5/0.2.6
+ * 那两版存在硬盘上的硬链接快照，**新建一律走 tar**。
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -134,24 +153,40 @@ function readManifest(dir: string): SnapshotEntry | null {
  */
 async function fingerprintOf(dir: string): Promise<string> {
   /*
-   * **只看顶层条目，不递归。**
+   * **递归遍历每个文件**的 `size + mtime`。
    *
-   * 原来递归遍历三万个文件算 size+mtime，实测 5～10 秒 —— 而它只是为了回答
-   * "内容有没有变"。这个问题的真正答案由 `package.json` / `pnpm-lock.yaml`
-   * 决定：装、卸、更新插件**必然**改它们，所以调用方把配置 hash 一并算进总指纹。
+   * 0.2.5 曾为了省那 5～10 秒改成"只看顶层条目"，那是不该做的：指纹的唯一职责是
+   * 回答"内容有没有变"，判错会导致**该存的快照没存**（或反之）。快照是退路，
+   * 判断必须准，快慢是次要的。
    *
-   * 递归的代价远大于收益：现在这一步是毫秒级，硬链接建快照 10 秒，
-   * 整个过程从"30 秒以上"降到十几秒。
+   * 用 `fs.promises` 而不是 `readdirSync`：IO 等待期间主进程仍能处理事件。
    */
   const h = createHash('sha256')
-  try {
-    const entries = await readdir(dir, { withFileTypes: true })
-    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      h.update(`${entry.isDirectory() ? 'D' : 'F'}${entry.name}\n`)
+  const walk = async (cur: string, rel: string): Promise<void> => {
+    let entries: string[]
+    try {
+      entries = (await readdir(cur)).sort()
+    } catch {
+      return
     }
-  } catch {
-    return ''
+    for (const name of entries) {
+      const full = join(cur, name)
+      const r = rel === '' ? name : `${rel}/${name}`
+      let st: Awaited<ReturnType<typeof lstat>>
+      try {
+        st = await lstat(full)
+      } catch {
+        continue
+      }
+      if (st.isDirectory()) {
+        h.update(`D${r}\n`)
+        await walk(full, r)
+      } else {
+        h.update(`F${r}|${st.size}|${Math.round(st.mtimeMs)}\n`)
+      }
+    }
   }
+  await walk(dir, '')
   return h.digest('hex')
 }
 
@@ -287,23 +322,19 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
     bytes += statSync(join(dest, name)).size
   }
 
-  // 全量打包 node_modules —— 不再区分 npm / 私有来源，全都在包里，也就不会漏
+  /*
+   * 全量打包 node_modules。
+   *
+   * **固定用 tar。** 0.2.5 曾改成"同盘硬链接目录"想省那 20 秒 —— 那是不该做的：
+   * 快照是出问题时唯一的退路，拿一条没验证过的恢复路径去换速度，等于把安全网换掉。
+   * 这里恢复压缩包；`restoreSnapshot` 里对硬链接形态的读取保留，只为让那两版
+   * 存下的快照仍能回退。
+   */
   let modules: SnapshotModules | null = null
   if (existsSync(modulesDir)) {
-    /*
-     * 同盘 → 硬链接整棵树（秒级）；跨盘 → 退回 tar 压缩包（几十秒）。
-     *
-     * 快照目录与母版默认都在 `<数据根>` 下，所以绝大多数用户走的是快路径。
-     */
-    const sameDisk = src.slice(0, 2).toLowerCase() === dest.slice(0, 2).toLowerCase()
-    if (sameDisk) {
-      await linkTree(modulesDir, join(dest, 'modules'))
-      modules = { dir: 'modules', bytes: 0 }
-    } else {
-      const tgz = join(dest, 'modules.tgz')
-      await tarCreate(src, tgz)
-      modules = { file: 'modules.tgz', bytes: statSync(tgz).size, sha256: sha256Of(tgz) }
-    }
+    const tgz = join(dest, 'modules.tgz')
+    await tarCreate(src, tgz)
+    modules = { file: 'modules.tgz', bytes: statSync(tgz).size, sha256: sha256Of(tgz) }
   }
 
   const entry: SnapshotEntry = {
