@@ -48,8 +48,17 @@ export interface LauncherSettings {
    * 另外打包后安装目录会被覆盖安装清空，介意的人也能指到安装目录之外。
    */
   snapshotDir: string
-  /** 版本池位置。留空 = 应用目录隔壁的 DSH-Sesame-data\dsh（不写死盘符） */
+  /**
+   * 版本池位置。留空 = 应用目录隔壁的 DSH-Sesame-data\dsh（不写死盘符）
+   */
   poolDir: string
+  /**
+   * **插件母版目录**。留空 = 关闭母版模式（各 profile 自己管插件，旧行为）。
+   *
+   * 非空时它是插件的唯一写入点：装 / 升 / 卸 / 开关都只改这里，启动 web 与桌面端
+   * 前从它克隆到各自 profile。形态与 dsh 的 profile 一致，但不含 dsh 运行时。
+   */
+  pluginsDir: string
 }
 
 const DEFAULTS: LauncherSettings = {
@@ -60,7 +69,8 @@ const DEFAULTS: LauncherSettings = {
   port: DEFAULT_PORT,
   dshHome: '',
   poolDir: '',
-  snapshotDir: ''
+  snapshotDir: '',
+  pluginsDir: ''
 }
 
 function file(): string {
@@ -89,7 +99,8 @@ export function readSettings(): LauncherSettings {
   dshHome: typeof parsed.dshHome === 'string' ? parsed.dshHome.trim() : DEFAULTS.dshHome,
   snapshotDir:
     typeof parsed.snapshotDir === 'string' ? parsed.snapshotDir.trim() : DEFAULTS.snapshotDir,
-  poolDir: typeof parsed.poolDir === 'string' ? parsed.poolDir.trim() : DEFAULTS.poolDir
+  poolDir: typeof parsed.poolDir === 'string' ? parsed.poolDir.trim() : DEFAULTS.poolDir,
+  pluginsDir: typeof parsed.pluginsDir === 'string' ? parsed.pluginsDir.trim() : DEFAULTS.pluginsDir
     }
   } catch {
     return { ...DEFAULTS }

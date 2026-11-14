@@ -50,7 +50,7 @@ export function normalizeSettingsPatch(input: unknown): Partial<LauncherSettings
   if (trimmedNonEmpty(patch['profile']) !== null) out.profile = trimmedNonEmpty(patch['profile']) as string
 
   // 这三个目录**允许空串**（空 = 用默认位置），所以不能用 trimmedNonEmpty
-  for (const key of ['dshHome', 'snapshotDir', 'poolDir'] as const) {
+  for (const key of ['dshHome', 'snapshotDir', 'poolDir', 'pluginsDir'] as const) {
     if (typeof patch[key] === 'string') out[key] = (patch[key] as string).trim()
   }
 

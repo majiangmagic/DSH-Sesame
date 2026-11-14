@@ -1,7 +1,10 @@
-﻿import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { SETTINGS_CHANNELS, UPDATE_CHANNELS } from '@shared/constants/channels'
 import { applySettingsPatch } from '../domain/settings/apply'
 import { checkLauncherUpdate, installLauncherUpdate } from '../domain/settings/update'
+import { snapshotRoot } from '../domain/snapshots/snapshot'
+import { dshHome } from '../platform/dshHome'
+import { pluginBaseDir, versionRoot } from '../platform/paths'
 import { readSettings } from '../platform/settings'
 
 /**
@@ -21,6 +24,19 @@ import { readSettings } from '../platform/settings'
  */
 export function registerSettingsIpc(): void {
   ipcMain.handle(SETTINGS_CHANNELS.get, () => readSettings())
+
+  /**
+   * 各项目录解析后的**真实路径**。
+   *
+   * 设置里留空 = 用默认，而默认随安装位置/数据根变化。界面拿这个显示"实际在哪"，
+   * 不再靠占位符里那句模糊的"默认<软件目录>/xxx" —— 那句话和实际位置已经对不上了。
+   */
+  ipcMain.handle(SETTINGS_CHANNELS.paths, () => ({
+    dshHome: dshHome(),
+    poolDir: versionRoot(),
+    snapshotDir: snapshotRoot(),
+    pluginsDir: pluginBaseDir()
+  }))
 
   ipcMain.handle(SETTINGS_CHANNELS.save, (_event: IpcMainInvokeEvent, patch: unknown) =>
     applySettingsPatch(patch)

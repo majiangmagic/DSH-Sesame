@@ -173,7 +173,9 @@ export const useMarketStore = defineStore('market', () => {
       const target = installTargetOf(plugin)
       if (target === null) continue
       const name = installedNameFor(target)
-      if (name !== '') claimed.add(name)
+      // 统一小写：`installedNames` 也是小写，两边必须同一种写法，
+      // 否则名字带大写的插件（目录里确有 `DSH-better-sidebar`）会被误报成"未被目录收录"
+      if (name !== '') claimed.add(name.toLowerCase())
     }
     return claimed
   })
@@ -250,8 +252,8 @@ export const useMarketStore = defineStore('market', () => {
     try {
       const [cat, plugins] = await Promise.all([api.getMarketCatalog('china'), api.getPlugins()])
       catalog.value = cat
-      installedNames.value = new Set(plugins.plugins.map((plugin) => plugin.name))
-      installedVersions.value = new Map(plugins.plugins.map((plugin) => [plugin.name, plugin.version]))
+      installedNames.value = new Set(plugins.plugins.map((plugin) => plugin.name.toLowerCase()))
+      installedVersions.value = new Map(plugins.plugins.map((plugin) => [plugin.name.toLowerCase(), plugin.version]))
       installedPlugins.value = plugins.plugins
       loaded.value = true
     } catch (cause) {
@@ -309,7 +311,7 @@ export const useMarketStore = defineStore('market', () => {
   function isInstalled(plugin: MarketPlugin): boolean {
     const target = installTargetOf(plugin)
     if (target === null) return false
-    if (target.kind === 'npm') return installedNames.value.has(target.target)
+    if (target.kind === 'npm') return installedNames.value.has(target.target.toLowerCase())
     return installedPlugins.value.some((item) => specMatchesTarget(item.spec, target))
   }
 
@@ -319,16 +321,42 @@ export const useMarketStore = defineStore('market', () => {
    * @returns 没装过时返回空串
    */
   function installedNameFor(target: InstallTarget): string {
-    if (target.kind === 'npm') return installedNames.value.has(target.target) ? target.target : ''
+    if (target.kind === 'npm') {
+      const key = target.target.toLowerCase()
+      if (!installedNames.value.has(key)) return ''
+      // 必须返回 **profile 里的原始大小写**：卸载命令要拿它去 pnpm remove，
+      // 而目录里的写法可能和已装的不一致（目录里确有 `DSH-better-sidebar` 这种）。
+      return installedPlugins.value.find((item) => item.name.toLowerCase() === key)?.name ?? target.target
+    }
     const hit = installedPlugins.value.find((plugin) => specMatchesTarget(plugin.spec, target))
     return hit === undefined ? '' : hit.name
+  }
+
+  /**
+   * 行上显示的**版本文案**（自带 `v` 前缀）。
+   *
+   * 三种情况，顺序不能反：
+   *   ① 已装且有更新 → `v0.4.4 → v0.4.6`（一眼看出"现在是什么、能升到什么"）
+   *   ② 已装、无更新 → `v0.4.4`（**已装版本**，不是目录版本）
+   *   ③ 未装 → 目录里的版本
+   *
+   * 之前这里优先用目录版本，于是已装插件的行显示的是"最新版"，而更新按钮也说同一个
+   * 数字 —— 看起来像"更新到一模一样的版本"。实际上装的是旧的，只是没显示出来。
+   */
+  function versionLabel(plugin: MarketPlugin): string {
+    const installed = installedVersionOf(plugin)
+    const target = updateTarget(plugin)
+    if (installed !== '' && target !== '') return `v${installed} → v${target}`
+    if (installed !== '') return `v${installed}`
+    const fromCatalog = String(plugin.version ?? '').trim()
+    return fromCatalog === '' ? '' : `v${fromCatalog}`
   }
 
   /** 这条记录在「已装」里的显示版本；只有 GitHub 的条目目录不给版本，回落到已装版本 */
   function installedVersionOf(plugin: MarketPlugin): string {
     const target = installTargetOf(plugin)
     if (target === null) return ''
-    if (target.kind === 'npm') return installedVersions.value.get(target.target) ?? ''
+    if (target.kind === 'npm') return installedVersions.value.get(target.target.toLowerCase()) ?? ''
     const hit = installedPlugins.value.find((item) => specMatchesTarget(item.spec, target))
     return hit === undefined ? '' : hit.version
   }
@@ -350,7 +378,7 @@ export const useMarketStore = defineStore('market', () => {
   function updateTarget(plugin: MarketPlugin): string {
     const target = installTargetOf(plugin)
     if (target === null || target.kind !== 'npm') return ''
-    const current = installedVersions.value.get(target.target)
+    const current = installedVersions.value.get(target.target.toLowerCase())
     if (!current) return ''
     const latest = String(plugin.version ?? '').trim()
     const diff = compareVersionStrings(latest, current)
@@ -535,6 +563,7 @@ export const useMarketStore = defineStore('market', () => {
     installable,
     installTargetOf,
     installedVersionOf,
+    versionLabel,
     sameIdentityCount,
     install,
     uninstall

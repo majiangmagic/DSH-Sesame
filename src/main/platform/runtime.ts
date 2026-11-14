@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { delimiter, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { app } from 'electron'
 
 /**
@@ -67,6 +67,20 @@ export function bundledBinDir(): string | null {
   const root = app.isPackaged ? process.resourcesPath.replace(/resources[\\/]?$/, '') : app.getAppPath()
   const dir = join(root, 'node', 'bin')
   return existsSync(dir) ? dir : null
+}
+
+/**
+ * 自带 pnpm 的**入口脚本**（`<app>/node/pnpm/bin/pnpm.cjs`），没有返回 null。
+ *
+ * 为什么要它：启动器现在**自己**在插件母版目录里跑 pnpm，不再经过 `dsh plugin` 命令
+ * （那条路会做 dsh 版本兼容检查、不匹配就回滚）。跑 pnpm 需要一个确切的脚本路径 ——
+ * `<app>/node/bin/pnpm.cmd` 那个垫片是给 dsh 子进程按名字调用的，不便于直接控制参数。
+ */
+export function bundledPnpmScript(): string | null {
+  const bin = bundledBinDir()
+  if (bin === null) return null
+  const script = join(dirname(bin), 'pnpm', 'bin', 'pnpm.cjs')
+  return existsSync(script) ? script : null
 }
 
 /**

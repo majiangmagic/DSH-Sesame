@@ -1,9 +1,10 @@
 import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/types/plugins'
-import type { PluginList } from '@shared/types/plugins'
+import type { PluginList, PluginBaseSource, PluginBaseStatus } from '@shared/types/plugins'
 import type { VersionOverview } from '@shared/types/versions'
 import type { DiagnosisResult } from '@shared/types/control'
 import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/types/snapshots'
 import type { LauncherUpdateInfo, LauncherUpdateProgressEvent } from '@shared/types/update'
+import type { SettingsPaths } from '@shared/types/settings'
 import type {
   DesktopLaunchProgress,
   InstallProgress,
@@ -46,6 +47,11 @@ export const realApi: ManagerApi = {
     return { ...list, plugins: list.plugins.filter((plugin) => !plugin.official) }
   },
 
+  getPluginBase: (): Promise<PluginBaseStatus> => window.sesame.plugins.baseStatus(),
+
+  initPluginBase: (source: PluginBaseSource): Promise<PluginBaseStatus> =>
+    window.sesame.plugins.initBase(source),
+
   setPluginEnabled: async (pluginName: string, enabled: boolean): Promise<void> => {
     await window.sesame.plugins.setEnabled(pluginName, enabled)
   },
@@ -55,6 +61,8 @@ export const realApi: ManagerApi = {
   getSettings: (): Promise<SettingsPayload> => window.sesame.settings.get(),
   saveSettings: (patch: Partial<SettingsPayload>): Promise<SettingsPayload> =>
     window.sesame.settings.save(patch),
+
+  getSettingsPaths: (): Promise<SettingsPaths> => window.sesame.settings.paths(),
 
   /* ---------------- 终端（真实） ---------------- */
 

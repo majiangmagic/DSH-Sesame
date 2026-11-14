@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 插件配置快照 —— 手动 / 自动存，最多 10 份，可回退。
  *
  * 快照的**文件清单照 dsh-plugin-guard**（它实测过这套够用）：
@@ -23,8 +23,8 @@ import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { lstat, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { dshHome, profileDir } from '../../platform/dshHome'
-import { dataRoot } from '../../platform/paths'
+import { dshHome } from '../../platform/dshHome'
+import { dataRoot, pluginBaseDir } from '../../platform/paths'
 import { readSettings } from '../../platform/settings'
 /*
  * 这里**不** import `currentRun`。曾经用它把"存的那一刻在跑哪个版本"记进 manifest，
@@ -54,35 +54,62 @@ export const SNAPSHOT_FILES = [
 export const SNAPSHOT_KEEP = 10
 
 /**
- * 快照锚定的 profile —— **永远是 `web`**，不随「启动方式」变。
+ * 快照锚定的**存档范围** —— 现在是「插件母版」，不再是某个 profile。
  *
- * 快照是「web profile 的配置 + 依赖存档」，这条基线是固定的。而设置里的 `profile`
- * 现在还能取 `desktop`（启动方式），它不是 dsh 的 profile —— 没有可快照的东西，
- * 目录也是空的。之前这里跟着 `readSettings().profile` 走，一旦把启动方式切成 desktop，
- * 快照就会跑到 `snapshots/desktop/` 并对空目录存档（用户实测发现）。
+ * 插件集中到母版之后（唯一写入点），快照的意义也跟着变了：
+ *   · 存的 = 母版当前的插件清单 + 开关 + 整棵 node_modules
+ *   · 回退到 = 把母版恢复成那一份，然后下次启动克隆给 web / 桌面端
+ *
+ * 所以没有任何理由再去读 `profiles/web` —— 那只是一份随时会被重建的副本，
+ * 对它存档等于存了个派生结果。
+ *
+ * 目录名因此定为 `base`。但老版本的快照是按 profile 名分的（`snapshots/web/`），
+ * 直接改名会让历史快照"消失"，所以 `scopeDir()` 里有兼容：`base` 不存在时退回 `web`。
  */
-const SNAPSHOT_PROFILE = 'web'
+const SNAPSHOT_SCOPE = 'base'
+
+/** 旧版本按 profile 名存快照，读到它时继续沿用（不迁移、不丢历史） */
+const LEGACY_SCOPE = 'web'
 
 
 /**
  * 快照根目录。
  *
- * 默认放在**应用目录**下的 snapshots（用户要求 —— C 盘紧张，快照要跟软件一起放 D 盘）：
- *   开发时 = 项目目录/snapshots
- *   打包后 = 安装目录/snapshots
+ * 默认放在**数据根目录**下（安装目录的隔壁，安装包不会碰它）：
+ *   开发时 = 项目目录/../DSH-Sesame-data/snapshots
+ *   打包后 = <exe 所在目录的父目录>/DSH-Sesame-data/snapshots
  *
- * 设置里可改（snapshotDir），因为打包后的安装目录**会被覆盖安装清空** ——
- * 介意的人可以指到安装目录之外。
+ * 设置里可改（`snapshotDir`）。**别指回安装目录里** —— 覆盖安装会把那里删掉。
  */
 export function snapshotRoot(): string {
   const custom = readSettings().snapshotDir
   if (typeof custom === 'string' && custom.trim() !== '') return custom.trim()
-  // 默认放**数据根目录**下（应用目录的隔壁）—— 安装包不会碰它，见 paths.ts 的说明
   return join(dataRoot(), 'snapshots')
 }
 
-function dirOf(profile: string): string {
-  return join(snapshotRoot(), profile)
+/**
+ * 快照实际存放的子目录（`<root>/base`）。
+ *
+ * 首次在新版本里打开时 `base` 还不存在、而旧版留下的 `web` 里可能有历史快照 ——
+ * 那种情况沿用 `web`，用户不会觉得"快照全没了"。
+ */
+function scopeDir(): string {
+  const root = snapshotRoot()
+  const current = join(root, SNAPSHOT_SCOPE)
+  if (existsSync(current)) return current
+  const legacy = join(root, LEGACY_SCOPE)
+  if (existsSync(legacy)) return legacy
+  return current
+}
+
+/** 快照覆盖的**源目录**：插件母版（未初始化时落到默认母版路径，由调用方给出可读报错） */
+function sourceDir(): string {
+  return pluginBaseDir()
+}
+
+/** 快照存放目录（`<root>/base`，兼容旧版的 `<root>/web`） */
+function dirOf(): string {
+  return scopeDir()
 }
 
 /** 文件系统安全的时间戳（冒号在 Windows 上不能做文件名） */
@@ -190,12 +217,11 @@ function sha256Of(file: string): string {
  * @param label   备注（手动时可填）
  */
 export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Promise<SnapshotEntry> {
-  const profile = SNAPSHOT_PROFILE
-  const src = profileDir(profile)
-  if (!existsSync(src)) throw new Error(`profile 目录不存在：${src}`)
+  const src = sourceDir()
+  if (!existsSync(src)) throw new Error(`插件母版目录不存在：${src}。请先在插件页选择基线初始化母版。`)
 
   const id = stamp()
-  const dest = join(dirOf(profile), id)
+  const dest = join(dirOf(), id)
 
   /*
    * 先去重：node_modules 的内容与最新一份**完全相同**时，什么都不做。
@@ -245,7 +271,8 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
   const entry: SnapshotEntry = {
     id,
     at: new Date().toISOString(),
-    profile,
+    /** 存档范围：插件母版（字段名沿用 `profile` 以免破坏已有 manifest 的读取） */
+    profile: SNAPSHOT_SCOPE,
     trigger,
     label,
     files: copied,
@@ -254,13 +281,13 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
     fingerprint
   }
   writeFileSync(join(dest, 'manifest.json'), JSON.stringify(entry, null, 2), 'utf8')
-  await prune(profile)
+  await prune()
   return entry
 }
 
 /** 超出保留数就删最旧的 */
-async function prune(profile: string): Promise<void> {
-  const dir = dirOf(profile)
+async function prune(): Promise<void> {
+  const dir = dirOf()
   if (!existsSync(dir)) return
   const ids = readdirSync(dir).sort() // 时间戳命名 ⇒ 字典序即时间序
   const excess = ids.length - SNAPSHOT_KEEP
@@ -271,7 +298,7 @@ async function prune(profile: string): Promise<void> {
 
 /** 列出快照，新的在前 */
 export function listSnapshots(): SnapshotEntry[] {
-  const dir = dirOf(SNAPSHOT_PROFILE)
+  const dir = dirOf()
   if (!existsSync(dir)) return []
   const out: SnapshotEntry[] = []
   for (const id of readdirSync(dir)) {
@@ -298,14 +325,13 @@ function assertSafeSnapshotId(id: string): void {
  */
 export async function restoreSnapshot(id: string): Promise<RestoreResult> {
   assertSafeSnapshotId(id)
-  const profile = SNAPSHOT_PROFILE
-  const src = join(dirOf(profile), id)
+  const src = join(dirOf(), id)
   if (!existsSync(src)) throw new Error(`快照不存在：${id}`)
   const manifest = readManifest(src)
   if (!manifest) throw new Error(`快照缺少 manifest.json：${id}`)
 
   const backup = await createSnapshot('pre-rollback', `回退到 ${id} 之前`)
-  const dest = profileDir(profile)
+  const dest = sourceDir()
 
   const restored: string[] = []
   const skipped: string[] = []
@@ -335,7 +361,7 @@ export async function restoreSnapshot(id: string): Promise<RestoreResult> {
  */
 export async function deleteSnapshot(id: string): Promise<boolean> {
   assertSafeSnapshotId(id)
-  const dir = join(dirOf(SNAPSHOT_PROFILE), id)
+  const dir = join(dirOf(), id)
   if (!existsSync(dir)) return false
   await rm(dir, { recursive: true, force: true })
   return true
@@ -357,8 +383,7 @@ export async function deleteSnapshot(id: string): Promise<boolean> {
  * 再告诉用户 node_modules 有多大、上一次存是什么时候。
  */
 export async function snapshotPreview(): Promise<SnapshotPreview> {
-  const profile = SNAPSHOT_PROFILE
-  const dir = profileDir(profile)
+  const dir = sourceDir()
   const nm = join(dir, 'node_modules')
 
   let plugins: SnapshotPluginRef[] = []
@@ -425,5 +450,5 @@ function readInstalledVersion(pkgDir: string): string {
  * 调用方（IPC）不设超时，这里只做说明用。
  */
 export function snapshotPaths(): SnapshotPaths {
-  return { profileDir: profileDir(SNAPSHOT_PROFILE), root: snapshotRoot(), home: dshHome() }
+  return { profileDir: sourceDir(), root: snapshotRoot(), home: dshHome() }
 }

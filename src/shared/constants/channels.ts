@@ -55,7 +55,16 @@ export const PLUGIN_CHANNELS = {
   /** 通过 dsh 自己的 plugin 命令卸载一个插件 */
   uninstall: 'plugins:uninstall',
   /** 主进程 → 渲染层的插件增删进度 */
-  progress: 'plugins:progress'
+  progress: 'plugins:progress',
+  /**
+   * 插件**母版**状态（是否已选基线、来源、插件数）。
+   *
+   * 母版是插件的唯一写入点：装 / 升 / 卸 / 开关都只改它，启动 web 与桌面端前
+   * 从它克隆到各自 profile。详见 `src/main/domain/control/pluginBase.ts`。
+   */
+  baseStatus: 'plugins:base-status',
+  /** 用某个 profile 现有的插件初始化母版（**只在首次**可用，已初始化会直接返回现状） */
+  initBase: 'plugins:init-base'
 } as const
 
 export const MARKET_CHANNELS = {
@@ -85,7 +94,15 @@ export const LOG_CHANNELS = {
  */
 export const SETTINGS_CHANNELS = {
   get: 'settings:get',
-  save: 'settings:save'
+  save: 'settings:save',
+  /**
+   * 各项目录**解析后的真实路径**。
+   *
+   * 设置里那几项留空表示"用默认"，而默认值随安装位置/数据根变化 —— 只写一句
+   * "默认<软件目录>/dsh" 的占位符根本说不清东西最后落在哪（旧版本那句还写着"软件目录"，
+   * 实际早已移到安装目录隔壁）。所以给界面一个能显示真实路径的通道。
+   */
+  paths: 'settings:paths'
 } as const
 
 /**

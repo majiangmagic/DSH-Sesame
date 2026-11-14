@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { MARKET_CHANNELS, PLUGIN_CHANNELS } from '@shared/constants/channels'
 import type { PluginProgressEvent } from '@shared/types/events'
 import { profileDir } from '../platform/dshHome'
+import { BASE_PROFILE } from '../platform/paths'
 import { pushTagged } from '../domain/terminal/logbus'
 import {
   assessProfile,
@@ -14,6 +15,7 @@ import {
 import { installPlugin, uninstallPlugin, updatePlugin } from '../domain/plugins/pluginInstall'
 import { listPlugins, setPluginEnabled } from '../domain/plugins/pluginState'
 import { withPluginWriteLock } from '../domain/plugins/serialize'
+import { baseStatus, initBaseFromProfile, type BaseSource } from '../domain/control/pluginBase'
 // "改 profile 前先自动存档"是一条业务规则，住在 domain 里（见那个文件的注释）
 import { autoSnapshotBefore } from '../domain/plugins/guard'
 
@@ -23,7 +25,26 @@ import { autoSnapshotBefore } from '../domain/plugins/guard'
  * 插件开关默认作用于 `web` profile（`DSH_HOME` 可覆盖，dsh 自身也是这个规则）。
  */
 export function registerPluginsIpc(): void {
-  ipcMain.handle(PLUGIN_CHANNELS.list, () => listPlugins(profileDir()))
+  ipcMain.handle(PLUGIN_CHANNELS.list, () => listPlugins(profileDir(BASE_PROFILE)))
+
+  /*
+   * 插件母版：状态查询与初始化。
+   *
+   * 初始化是"一次性迁移"——把 web 或桌面端现有的插件复制进母版。之后装/升/卸/开关
+   * 都只动母版，启动时克隆到各 profile（见 domain/control/pluginBase.ts）。
+   * 用 `withPluginWriteLock` 排队，避免与正在跑的插件操作抢同一批文件。
+   */
+  ipcMain.handle(PLUGIN_CHANNELS.baseStatus, () => baseStatus())
+
+  ipcMain.handle(PLUGIN_CHANNELS.initBase, async (_event: IpcMainInvokeEvent, source: BaseSource) => {
+    if (source !== 'web' && source !== 'desktop') throw new Error(`未知的插件基线：${String(source)}`)
+    pushTagged('启动器', `用 ${source} 的插件初始化母版`)
+    return withPluginWriteLock(async () => {
+      const status = await initBaseFromProfile(source, (text) => pushTagged('母版', text))
+      pushTagged('启动器', `母版已就绪：${status.plugins} 个插件（来源 ${status.source}）`)
+      return status
+    })
+  })
 
   // 开关直接返回写后的新清单：界面据此更新，省掉一次"改完再拉一遍"的往返，
   // 也避免两次调用之间被别的东西改动而看到中间态。
@@ -46,7 +67,7 @@ export function registerPluginsIpc(): void {
        * 安装 / 升级 / 卸载**仍然**存快照 —— 那三个真会动 `node_modules`，不可一键复原。
        */
       pushTagged('启动器', `${enabled ? '开启' : '关闭'}插件 ${packageName}`)
-      const dir = profileDir()
+      const dir = profileDir(BASE_PROFILE)
 
       /*
        * **不在这里写桌面端。** 只改 web —— 桌面端的那份由 `syncWebToDesktop` 在**启动前对齐**
@@ -160,7 +181,7 @@ export function registerPluginsIpc(): void {
       errors: check.errors,
       // 顺带把兼容性与快照能力也报上来，界面据此决定显示哪些入口
       compatibility: handle.capabilities.available ? safe(() => assessProfile(profileDirName())) : null,
-      snapshots: handle.capabilities.available ? safe(() => listSnapshots(profileDir())) : null
+      snapshots: handle.capabilities.available ? safe(() => listSnapshots(profileDir(BASE_PROFILE))) : null
     }
   })
 }
@@ -174,7 +195,7 @@ export function registerPluginsIpc(): void {
  * （可写：envFor 仍然会把当前 profile 传给 dsh；只是启动器自己不再回头读它。）
  */
 function profileDirName(): string {
-  return 'web'
+  return BASE_PROFILE
 }
 
 /** 探测用：内部 API 缺失时不要让它把 IPC 调用变成异常 */

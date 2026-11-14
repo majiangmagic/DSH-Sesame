@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DiagnosisResult } from '@shared/types/control'
 import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/types/snapshots'
-import type { LauncherSettingsPayload } from '@shared/types/settings'
+import type { LauncherSettingsPayload, SettingsPaths } from '@shared/types/settings'
 import {
   DESKTOP_CHANNELS,
   LOG_CHANNELS,
@@ -20,7 +20,7 @@ import type {
   VersionProgressEvent
 } from '@shared/types/events'
 import type { MarketCapabilities, MarketCatalog, MarketSelfUpdate } from '@shared/types/plugins'
-import type { PluginList } from '@shared/types/plugins'
+import type { PluginBaseSource, PluginBaseStatus, PluginList } from '@shared/types/plugins'
 import type { InstalledVersion, VersionOverview } from '@shared/types/versions'
 import type { LauncherUpdateInfo, LauncherUpdateProgressEvent } from '@shared/types/update'
 
@@ -123,7 +123,17 @@ const api = {
       return () => {
         ipcRenderer.off(PLUGIN_CHANNELS.progress, handler)
       }
-    }
+    },
+
+    /**
+     * 插件**母版**状态：是否已选基线、来源、插件数。
+     * `initialized: false` 时**禁止启动 dsh**，界面要弹窗让用户选一次基线。
+     */
+    baseStatus: (): Promise<PluginBaseStatus> => ipcRenderer.invoke(PLUGIN_CHANNELS.baseStatus),
+
+    /** 用 web 或桌面端现有的插件初始化母版（一次性；已初始化会直接返回现状） */
+    initBase: (source: PluginBaseSource): Promise<PluginBaseStatus> =>
+      ipcRenderer.invoke(PLUGIN_CHANNELS.initBase, source)
   },
 
   log: {
@@ -149,7 +159,10 @@ const api = {
 
     /** 合并写入设置；开机自启会同步到系统（仅打包后真正写注册表） */
     save: (patch: Partial<LauncherSettingsPayload>): Promise<LauncherSettingsPayload> =>
-      ipcRenderer.invoke(SETTINGS_CHANNELS.save, patch)
+      ipcRenderer.invoke(SETTINGS_CHANNELS.save, patch),
+
+    /** 各项目录解析后的**真实路径**（留空时默认落到哪），供设置页显示 */
+    paths: (): Promise<SettingsPaths> => ipcRenderer.invoke(SETTINGS_CHANNELS.paths)
   },
 
   market: {

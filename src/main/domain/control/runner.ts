@@ -16,7 +16,8 @@ import {
   tailDesktopLog,
   type DesktopProgress
 } from './desktop'
-import { repairDesktopPatch, syncWebToDesktop } from './sync'
+import { repairDesktopPatch } from './sync'
+import { baseStatus, cloneBaseToProfile } from './pluginBase'
 
 /**
  * dsh 进程的运行器 —— 「启动 / 停止」的真实实现。
@@ -305,6 +306,24 @@ async function startVersionInner(
   const profile = readSettings().profile
 
   /*
+   * **插件母版闸门。**
+   *
+   * 插件现在只有一个写入点（母版），web 与桌面端都是它的副本。母版没初始化 = 还不知道
+   * 插件该以哪边为基线，这时候启动任何一个都会得到一套"不确定的插件"，所以直接拒绝，
+   * 由界面弹窗让用户选 web / 桌面端作为初始基线（见 pluginBase.ts）。
+   */
+  if (profile === 'web' || profile === 'desktop') {
+    const base = baseStatus()
+    if (!base.initialized) {
+      throw new Error(
+        'BASEPENDING:' +
+          '插件母版还没有初始化。请先选择以「Web 端」还是「桌面端」现有的插件作为基线，' +
+          '之后所有启动方式都会使用这套插件。'
+      )
+    }
+  }
+
+  /*
    * 桌面端不是 dsh 的 profile，而是另一个 Electron 应用：这里不 spawn dsh，改成
    * 「按需下载 + 解压官方安装包 → 启动它」，并把进程记进 desktopProc ——
    * 于是它和 web 一样：界面标「运行中」、点「停止」能掐断。
@@ -321,32 +340,30 @@ async function startVersionInner(
     const exe = await ensureDesktop(version, onDesktopProgress)
 
     /*
-     * web 是唯一基准：启动前把 web 的插件**一比一**搬到桌面端 profile。
+     * 启动前把母版的插件克隆到桌面端 profile。
      *
-     * 同步**无条件重建** —— 每次都会先把桌面端的插件全部卸掉再按 web 装回来
-     * （为什么不做"看起来一致就跳过"的判断，见 sync.ts 顶部的说明）。
+     * 以前这里是「web 的插件逐个 remove + add 到桌面端」—— 8 个插件 16 次 pnpm 往返，
+     * 每次启动等 2~3 分钟。现在母版是唯一写入点，profile 只是副本，整棵 node_modules
+     * 克隆（同盘硬链接）几秒完成。
      *
-     * 必须在**启动之前**做 —— 桌面端跑起来就持有 profile 写锁，那时再动它会失败。
-     * 同步失败**不阻断启动**：桌面端本身是好的，只是插件没跟上。
+     * 必须在**启动之前**做 —— 桌面端跑起来就持有 profile 写锁。
+     * 克隆失败**不阻断启动**：桌面端本身是好的，只是插件没跟上（会写进终端页）。
      */
     try {
-      onDesktopProgress?.({ phase: 'install', text: '正在对齐 web 与桌面端的插件…' })
-      const report = await syncWebToDesktop(
-        (p) => onDesktopProgress?.({ phase: 'install', text: p.text }),
-        version
+      onDesktopProgress?.({ phase: 'install', text: '正在从插件母版同步到桌面端…' })
+      const report = await cloneBaseToProfile('desktop', (text) => {
+        onDesktopProgress?.({ phase: 'install', text })
+        pushTagged('桌面端', text)
+      })
+      pushTagged(
+        '桌面端',
+        `插件已从母版同步：${report.files} 个文件（硬链接 ${report.linked} / 复制 ${report.copied}）`
       )
-      const summary: string[] = []
-      if (report.removed.length > 0) summary.push(`卸掉 ${report.removed.length} 个`)
-      if (report.installed.length > 0) summary.push(`装回 ${report.installed.length} 个`)
-      if (report.patched.length > 0) summary.push(`补丁条目 ${report.patched.length} 条`)
-      if (report.aligned.length > 0) summary.push(`启停对齐 ${report.aligned.length} 条`)
-      if (report.exempted.length > 0) summary.push(`版本声明落后已开闸 ${report.exempted.length} 个`)
-      if (summary.length > 0) pushTagged('桌面端', `插件已对齐 web：${summary.join(' · ')}`)
-      if (report.failed.length > 0) {
-        pushTagged('桌面端', `这些插件没同步成功：${report.failed.join('、')}（可在插件页单独处理）`)
+      if (report.broken.length > 0) {
+        pushTagged('桌面端', `这些包不完整：${report.broken.join('、')}（建议在母版里重装）`)
       }
     } catch (cause) {
-      pushTagged('桌面端', '同步失败（不影响启动）：' + (cause instanceof Error ? cause.message : String(cause)))
+      pushTagged('桌面端', '从母版同步失败（不影响启动）：' + (cause instanceof Error ? cause.message : String(cause)))
     }
 
     /*
@@ -430,6 +447,18 @@ async function startVersionInner(
     mkdirSync(profileDir(profile), { recursive: true })
   } catch {
     // 建不出来就让 dsh 自己报错，别在这里吞掉真实原因
+  }
+
+  /*
+   * 启动前把母版的插件克隆到 web profile —— 与桌面端走同一条路。
+   *
+   * 这一步失败**必须**阻断：web 端会拿着一个没插件（或半残缺）的 profile 跑起来，
+   * 表现是"插件全没了"，比启动失败更难排查。
+   */
+  const cloneReport = await cloneBaseToProfile('web', (text) => pushTagged('web', text))
+  pushTagged('web', `插件已从母版同步：${cloneReport.files} 个文件（硬链接 ${cloneReport.linked} / 复制 ${cloneReport.copied}）`)
+  if (cloneReport.broken.length > 0) {
+    pushTagged('web', `这些包不完整：${cloneReport.broken.join('、')}（建议在母版里重装）`)
   }
 
   // 端口在这里定：先试固定端口，占用则回退（并已写日志说明）

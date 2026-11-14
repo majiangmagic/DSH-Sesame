@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { app } from 'electron'
 import { readSettings } from './settings'
+import { dshHome } from './dshHome'
 
 /**
  * DSH-Sesame 的数据根目录。
@@ -108,6 +109,35 @@ export function migrateLegacyData(): string | null {
 /** dsh 版本池 */
 export function versionRoot(): string {
   return join(dataRoot(), 'dsh')
+}
+
+/**
+ * **插件母版**的 profile 名。
+ *
+ * 为什么必须是一个"profile 名"而不是任意目录：
+ * `dsh plugin --profile <name>` 只接受名字，且**固定解析到 `$DSH_HOME/profiles/<name>`**
+ * （`bin.js` 里 `--profile` 的说明原文：*the profile under $DSH_HOME/profiles to boot*）。
+ * 把母版放在别处，dsh 的 CLI 就够不着它，"在母版里装插件"这件事根本无法实现。
+ *
+ * 所以母版永远是 `<DSH_HOME>/profiles/base`；用户想让它落在别的盘/别的目录时，
+ * 用 **junction** 把 `base` 指过去（见 `pluginBase.ts` 的 `ensureBaseLink`）——
+ * dsh 仍然按 `profiles/base` 访问，路径不变，内容在用户指定的位置。
+ */
+export const BASE_PROFILE = 'base'
+
+/** 母版目录（`<DSH_HOME>/profiles/base`，可能是一个指向用户自定义位置的 junction） */
+export function pluginBaseDir(): string {
+  return join(dshHome(), 'profiles', BASE_PROFILE)
+}
+
+/**
+ * 用户在设置里指定的母版**目标**目录；没设就是空串（= 直接用 `profiles/base`）。
+ *
+ * 非空且不在 `profiles/` 下时，`base` 会变成指向它的 junction。
+ */
+export function pluginBaseTarget(): string {
+  const fromSettings = readSettings().pluginsDir
+  return typeof fromSettings === 'string' ? fromSettings.trim() : ''
 }
 
 /** 某个版本的安装目录：`<版本根>/<版本号>` */

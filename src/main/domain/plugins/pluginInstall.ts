@@ -1,36 +1,36 @@
-import { execFileSync, spawn } from 'node:child_process'
-import { decodeChunk } from '../../platform/textDecode'
-import { existsSync, readFileSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cmpVer, parseVer } from '@utils/version'
 import { repoOfSpec } from '@utils/pluginTarget'
-import { dshHome, profileDir } from '../../platform/dshHome'
-import { ensureProfileInitialized } from '../control/diagnose'
-import { listInstalled } from '../versions/versions'
-import { pathWithBundledBin, requireNode } from '../../platform/runtime'
-import { RELEASE_AGE_BYPASS } from '../../platform/dshCli'
+import { profileDir } from '../../platform/dshHome'
+import { BASE_PROFILE } from '../../platform/paths'
+import { addToBundles, allowBuildFor, removeFromBundles, runPnpm, type PnpmOutcome } from './localPnpm'
 
 /**
- * 插件安装 / 卸载 —— **走 dsh 自己的 `plugin` 命令**。
+ * 插件安装 / 卸载 —— **启动器自己跑 pnpm**，不经过 `dsh plugin` 命令。
  *
- * ```
- * node <已装版本的 lib/bin.js> plugin --profile web add    <npm 包名>
- * node <已装版本的 lib/bin.js> plugin --profile web remove <npm 包名>
- * ```
+ * ## 为什么不再用 dsh 的 plugin 命令
  *
- * 四个不能变的前提：
+ * `dsh plugin --profile <name> add …` 内部是 `runProfilePnpm`：装完会跑一遍
+ * **插件兼容性检查**（`engines.dsh` 或 `@deepseek-ai/dsh*` 的 peer 范围），
+ * 不匹配就整段回滚，日志里留下 `dsh: installation rejected: …`。
  *
- * 1. **必须用 dsh 的命令，不能自己 `npm install`。** profile 是 **pnpm 布局**
- *    （有 `pnpm-lock.yaml` / `pnpm-workspace.yaml`，没有 `package-lock.json`），
- *    混用 npm 会让同一个目录里出现两套依赖布局；
- * 2. **dsh 会在 pnpm 成功后 reconcile `dsh.profile.bundles`**（市场 `install.ts` 的注释写明），
- *    所以装完不需要我们再往启用清单里补一笔 —— 漏补的表现就是"装好了却不加载"；
- * 3. **用哪个版本去跑**：取版本池里 semver 最高的已装版本。用旧版本会用旧的 pnpm 兼容策略
- *    去改动**所有版本共享**的 profile；
- * 4. **包名用真 npm 包名**（目录里的 `npm` 字段，可能带 scope），不是目录里的短名 ——
- *    目录里存在不同作者的同名短名。
+ * 而大量插件只是**声明停在旧版本**、实际能跑（目录里常见的写法），用户明确要求
+ * 不要被这道检查拦住，也**不允许改插件包里的文件**（母版必须只放原始文件）。
+ * 所以这里直接调 pnpm，自己补上 dsh 真正必要的那几步。
  *
- * 一个 dsh 版本都没有时明确报错：没有可用的 dsh 就没有正确的安装路径。
+ * ## 必须自己补的两件事
+ *
+ * 1. **启用清单**：dsh 在 pnpm 成功后会把包 reconcile 进 `package.json` 的
+ *    `dsh.profile.bundles`。少了这步插件"装了但不加载" —— 见 `addToBundles`。
+ * 2. **git 包的构建脚本**：git 来源的插件靠 `prepare` 现场构建出 `dist`，而 pnpm
+ *    默认不执行依赖的构建脚本。失败输出里会打印 `Ignored build scripts: …`，
+ *    拿到包名写进 `pnpm-workspace.yaml` 的 `allowBuilds` 再重试一次。
+ *
+ * ## 仍然遵守的前提
+ *
+ * · profile 是 **pnpm 布局**（`pnpm-lock.yaml` / `pnpm-workspace.yaml`），只用 pnpm；
+ * · 包名用**真 npm 包名**（目录的 `npm` 字段，可能带 scope），不是目录短名；
+ * · 失败要回滚 `package.json` 与 `pnpm-lock.yaml`（见 `addWithRollback`）。
  */
 
 export interface PluginProgress {
@@ -38,223 +38,17 @@ export interface PluginProgress {
   text: string
 }
 
-const PROFILE = 'web'
-
-/** 挑一个用来执行安装的 dsh：版本池里 semver 最高的已装版本 */
-function pickDsh(): { version: string; bin: string } {
-  const installed = listInstalled().filter((item) => existsSync(item.bin))
-  if (installed.length === 0) {
-    throw new Error(
-      '没有可用的 dsh 版本，无法改动插件。插件必须由 dsh 自己的 plugin 命令安装（profile 是 pnpm 布局），请先在「版本」页下载一个版本。'
-    )
-  }
-  installed.sort((a, b) => {
-    const pa = parseVer(a.version)
-    const pb = parseVer(b.version)
-    if (!pa || !pb) return b.version.localeCompare(a.version)
-    return cmpVer(pb, pa)
-  })
-  const best = installed[0] as (typeof installed)[number]
-  return { version: best.version, bin: best.bin }
-}
-
 /**
- * 插件命令的超时。
+ * 插件操作的 profile 名 —— **母版**（$DSH_HOME/profiles/base）。
  *
- * 原先 `run()` **没有超时** —— 实测一次「更新」挂到 90 秒以上、一行输出都没有，
- * 界面就永远停在"更新中…"，用户只能重启应用。插件命令要联网拉包，必须有个上限。
+ * 插件只有一个写入点：装 / 升 / 卸 / 开关都落在这里，启动 web 与桌面端前再从母版
+ * 克隆到各自的 profile（见 domain/control/pluginBase.ts）。
+ *
+ * 为什么必须用"profile 名"而不是直接给目录：dsh plugin --profile <name> 只接受名字，
+ * 固定解析到 $DSH_HOME/profiles/<name>。用户把插件目录指到别处时，base 是个
+ * junction，dsh 照旧按这个名字访问。
  */
-const PLUGIN_TIMEOUT_MS = 240_000
-
-/**
- * 一次性关掉 pnpm 的"最小发布年龄"闸 —— 常量在 `platform/dshCli.ts`。
- *
- * 挪出去是因为 `control/sync.ts` 也要用它，而从这个文件导出会形成
- * `sync → pluginInstall → versions → runner → sync` 的循环依赖。
- * 完整的来龙去脉（为什么必须有它、三个使用点各自的理由）见那个文件。
- */
-
-/**
- * 清掉**残留**的 profile 写锁。
- *
- * `package.json.lock` 里存的是持有者的 PID。dsh 的写操作等这把锁是有超时的，超时直接失败：
- * `atomic-write: timed out waiting for the writer lock at …`。
- *
- * 实测真实 profile 里躺着一个 5 字节的锁（内容 "6552"），创建于 09/24 13:44，
- * 而 **PID 6552 早已不存在** —— 它把此后每一次插件操作都挡死：dsh 启动了、
- * 写了 cordis.yml，然后卡在锁上等超时，pnpm 从未运行（所以连操作日志都没有）。
- * 这就是"点了更新却什么都没发生"的根因，与发布年龄无关。
- *
- * **只在 PID 明确已死时才删** —— 探测得到说明真有操作在跑，绝不能碰。
- */
-function isHolderAlive(pid: number): boolean {
-  /*
-   * 判断"锁的持有者是否真在跑"。
-   *
-   * 只用 process.kill(pid, 0) 探测存在性在**跨机器**时是错的：
-   * profile 连 `package.json.lock` 一起被拷到另一台机器后，锁里记的是**原机器**的 PID，
-   * 而在新机器上那个数字很可能正好对应一个无关的活进程（Windows PID 会循环复用）
-   * → 被判成"持有者还活着" → 锁永远不清 → dsh 每次写 profile 都白等到超时。
-   * 表现就是"换台机器点更新一直卡死、pnpm 从未运行、连操作日志都没有"。
-   *
-   * 所以：存在性 + **进程名**双重确认。名字不像 node/dsh/pnpm 的一律不认。
-   */
-  try {
-    process.kill(pid, 0)
-  } catch {
-    return false // 进程不存在 → 残留锁
-  }
-  try {
-    const out = execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
-      encoding: 'utf8',
-      timeout: 5000,
-      windowsHide: true
-    })
-    const line = out.split(/\r?\n/).find((l) => l.trim() !== '')
-    if (!line) return false
-    const name = (line.split('","')[0] ?? '').replace(/^"/, '').toLowerCase()
-    return /node|dsh|pnpm|electron/.test(name)
-  } catch {
-    // 查不出来就保守认为它活着：宁可等 dsh 自己超时，也不误删真在跑的锁
-    return true
-  }
-}
-
-function clearStaleLock(onLine: (line: string) => void): void {
-  const lock = join(profileDir(PROFILE), 'package.json.lock')
-  let holder: number
-  try {
-    holder = Number.parseInt(readFileSync(lock, 'utf8').trim(), 10)
-  } catch {
-    return // 没有锁文件 / 读不了 —— 不是要处理的情况
-  }
-  if (!Number.isInteger(holder) || holder <= 0) return
-
-  /*
-   * 时间判据放在最前面：锁太旧一律视为残留。
-   * dsh 自己的写锁超时就在分钟量级，超过这个时限的锁不可能是"正在进行的操作"。
-   * 这一条对跨机器、时钟不同步、PID 复用三种情况都成立。
-   */
-  const STALE_MS = 10 * 60 * 1000
-  let age = Number.POSITIVE_INFINITY
-  try {
-    age = Date.now() - statSync(lock).mtimeMs
-  } catch {
-    /* 取不到时间就当它是旧的 */
-  }
-  if (age <= STALE_MS && isHolderAlive(holder)) return // 又新、持有者又真在跑 → 不碰
-
-  try {
-    unlinkSync(lock)
-    onLine(
-      `[启动器] 清掉残留的 profile 写锁（PID ${holder}，` +
-        (Number.isFinite(age) ? `已放置 ${Math.round(age / 60000)} 分钟` : '时间未知') +
-        '）'
-    )
-  } catch {
-    /* 删不掉就算了：dsh 自己会超时并给出错误 */
-  }
-}
-
-async function run(args: string[], onLine: (line: string) => void): Promise<{ code: number; tail: string[] }> {
-  // 每次写 profile 前先处理残留锁，否则会白等到超时
-  clearStaleLock(onLine)
-  const tail: string[] = []
-  const KEEP = 40
-  /**
-   * 与 runner.ts 用**同一个** Node 解析 —— 必须是真正的 node.exe。
-   *
-   * 这里原本图省事用 `process.execPath` + `ELECTRON_RUN_AS_NODE=1`（让 Electron 退化成 Node），
-   * 实测也能跑通：pnpm 是纯 JS，不做 dsh 加载器那种 V8 指纹检查。
-   * 但它很脆 —— `plugin add` 会触发 postinstall 脚本与 native 构建，
-   * 那类东西在 Electron 的 Node 下正是最容易坏的。两处共用一个运行时，行为才可预期。
-   */
-  const node = requireNode()
-
-  /*
-   * ★ 先确保 profile 已被 dsh **初始化过**，再 spawn。
-   *
-   * 触发场景（实测）：刚装好一个 dsh 版本、还没手动启动过一次 ——
-   * 此时 `profiles/web` 不存在，而 spawn 的 cwd 指向它 → Node 报 ENOENT，
-   * **并且消息里显示的是命令路径**（`spawn D:\…\node\node.exe ENOENT`），
-   * 看起来像"可执行文件不见了"，于是所有排查都会跑偏。
-   *
-   * 光 mkdir 不够：dsh 要的是完整 profile（package.json / 补丁模板 / 锁文件）。
-   * 所以按"用户手动启动一次"的原样流程初始化：启动 → 等就绪地址 → 自动关掉。
-   */
-  await ensureProfileInitialized(pickDsh().version, PROFILE)
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(node.path, args, {
-      cwd: profileDir(PROFILE),
-      windowsHide: true,
-      env: {
-        ...process.env,
-        DSH_HOME: dshHome(),
-        DSH_NODE: node.path,
-        // 把自己带的 pnpm 垫片目录插到 PATH 最前面 —— dsh 的插件管理器调的是 PATH 上的
-        // `pnpm`，插进去就命中我们自带的那个，不再取决于用户机器上装没装
-        PATH: pathWithBundledBin(),
-        // 取自 dshmarket（lib/install.js:131）："the market runs pnpm with CI=true
-        // (TTY hangs)"。pnpm 在非 CI 环境下会走交互分支，遇到需要确认/等待输入的
-        // 情形就永久挂住 —— 正是我遇到过的症状（90 秒零输出、永不结束）。
-        CI: 'true',
-        PYTHONIOENCODING: 'utf-8',
-        PYTHONUTF8: '1',
-        // **不要再把 progress 关掉**：这里原来是 `npm_config_progress: 'false'`，
-        // pnpm 因此几乎不输出，界面上就成了"点了更新、什么都没发生"。
-        // append-only 让 pnpm 以纯文本逐行输出（不依赖 TTY），才拿得到持续可见的进度。
-        npm_config_reporter: 'append-only'
-      }
-    })
-    /**
-     * 超时保护。到点杀**整棵进程树** —— Windows 上 `child.kill()` 只杀直接子进程，
-     * 而 `plugin add` 会跑 postinstall，留下孙进程（与 runner.ts 同样的处理）。
-     */
-    let settled = false
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      try {
-        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
-      } catch {
-        child.kill()
-      }
-      reject(
-        new Error(
-          `插件命令超过 ${PLUGIN_TIMEOUT_MS / 1000} 秒仍未结束，已强制终止。\n` +
-            `最后几行输出：\n${tail.slice(-8).join('\n') || '(没有任何输出)'}`
-        )
-      )
-    }, PLUGIN_TIMEOUT_MS)
-    let buffer = ''
-    const consume = (chunk: Buffer): void => {
-      buffer += decodeChunk(chunk)
-      const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        const text = line.replace(/\s+$/, '')
-        if (text === '') continue
-        if (tail.length >= KEEP) tail.shift()
-        tail.push(text)
-        onLine(text)
-      }
-    }
-    child.stdout?.on('data', consume)
-    child.stderr?.on('data', consume)
-    child.on('error', reject)
-    child.on('close', (code) => {
-      settled = true
-      clearTimeout(timer)
-      if (buffer.trim() !== '') {
-        if (tail.length >= KEEP) tail.shift()
-        tail.push(buffer.trim())
-        onLine(buffer.trim())
-      }
-      resolve({ code: code ?? -1, tail })
-    })
-  })
-}
+const PROFILE = BASE_PROFILE
 
 /** 读 profile 清单里的 dependencies */
 function manifestDeps(): Record<string, string> {
@@ -324,6 +118,74 @@ function progressLine(text: string, onProgress: (progress: PluginProgress) => vo
   onProgress({ phase: 'install', text: line })
 }
 
+/** 谈 profile 的两个关键文件，供失败回滚 */
+function backupManifest(dir: string): Array<{ path: string; text: string | null }> {
+  return ['package.json', 'pnpm-lock.yaml'].map((name) => {
+    const path = join(dir, name)
+    try {
+      return { path, text: readFileSync(path, 'utf8') }
+    } catch {
+      return { path, text: null }
+    }
+  })
+}
+
+/** 把备份写回（`null` 表示原本就没有这个文件，恢复成"不存在"） */
+function restoreManifest(backup: Array<{ path: string; text: string | null }>): void {
+  for (const item of backup) {
+    try {
+      if (item.text === null) unlinkSync(item.path)
+      else writeFileSync(item.path, item.text, 'utf8')
+    } catch {
+      // 恢复失败也没别的办法了：调用方会把 pnpm 的原始输出报给用户
+    }
+  }
+}
+
+/**
+ * 从 pnpm 输出里挖出"构建脚本被忽略"的包名。
+ *
+ * git 来源的插件靠 `prepare` 现场构建出 `dist`，而 pnpm 默认不执行依赖的构建脚本。
+ * pnpm 会把被跳过的包打印成 `Ignored build scripts: a, b.` —— 拿到名字就能放开重试。
+ */
+function ignoredBuildNames(tail: string[]): string[] {
+  const names = new Set<string>()
+  for (const match of tail.join('\n').matchAll(/Ignored build scripts?:\s*(.+)/gi)) {
+    for (const part of (match[1] ?? '').split(/[,、]/)) {
+      const name = part.trim().replace(/[.。;；]+$/, '')
+      if (name !== '') names.add(name)
+    }
+  }
+  return [...names]
+}
+
+/**
+ * 装一个包：失败就回滚两个清单文件；原因是"构建脚本被忽略"时先放开白名单再重试一次。
+ *
+ * 回滚的理由：pnpm 失败可能已经把 `package.json` 里的 dependencies 写进去了，
+ * 留在那里会让下次启动的克隆带上一个装了一半的插件。
+ */
+async function addWithRollback(
+  dir: string,
+  spec: string,
+  onLine: (line: string) => void
+): Promise<PnpmOutcome> {
+  const backup = backupManifest(dir)
+  let outcome = await runPnpm(dir, ['add', spec], onLine)
+
+  if (outcome.code !== 0) {
+    const names = ignoredBuildNames(outcome.tail)
+    if (names.length > 0) {
+      onLine(`这些包的构建脚本被 pnpm 跳过了，加入白名单后重试：${names.join('、')}`)
+      for (const name of names) allowBuildFor(dir, name)
+      outcome = await runPnpm(dir, ['add', spec], onLine)
+    }
+  }
+
+  if (outcome.code !== 0) restoreManifest(backup)
+  return outcome
+}
+
 /**
  * 安装一个插件到 profile。
  *
@@ -340,11 +202,17 @@ export async function installPlugin(
 ): Promise<void> {
   const target = typeof spec === 'string' ? spec.trim() : ''
   if (target === '') throw new Error('缺少安装目标')
-  // 以 `-` 开头会被 dsh/pnpm 当成选项（`--registry=…`），不是包名
+  // 以 `-` 开头会被 pnpm 当成选项（`--registry=…`），不是包名
   if (target.startsWith('-')) throw new Error(`安装目标不合法：${target}`)
 
-  const dsh = pickDsh()
-  onProgress({ phase: 'resolve', text: `用 dsh ${dsh.version} 安装 ${target}…` })
+  const dir = profileDir(PROFILE)
+  if (!existsSync(join(dir, 'package.json'))) {
+    throw new Error(
+      '插件母版还没有初始化：请先在插件页选择以「Web 端」还是「桌面端」现有的插件作为基线。'
+    )
+  }
+
+  onProgress({ phase: 'resolve', text: `正在安装 ${target}…` })
 
   const before = manifestDeps()
   const already = findInstalledKey(target, before)
@@ -353,11 +221,7 @@ export async function installPlugin(
     return
   }
 
-  const outcome = await run(
-    [dsh.bin, 'plugin', '--profile', PROFILE, 'add', target, RELEASE_AGE_BYPASS],
-    (line) =>
-    progressLine(line, onProgress)
-  )
+  const outcome = await addWithRollback(dir, target, (line) => progressLine(line, onProgress))
   if (outcome.code !== 0) {
     throw new Error(`安装 ${target} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`)
   }
@@ -374,6 +238,10 @@ export async function installPlugin(
     throw new Error(
       `命令成功退出，但 ${target} 没出现在 profile 清单里\n${outcome.tail.slice(-10).join('\n')}`
     )
+  }
+  // dsh 原本在 pnpm 成功后 reconcile 启用清单；绕开它就得自己补，否则"装了但不加载"
+  if (addToBundles(dir, landed)) {
+    onProgress({ phase: 'done', text: `${landed} 已加入启用清单` })
   }
   onProgress({ phase: 'done', text: `${landed} 安装完成` })
 }
@@ -392,30 +260,22 @@ export async function uninstallPlugin(
   if (packageName.startsWith('@deepseek-ai/')) {
     throw new Error(`${packageName} 是 dsh 官方组件，不允许从启动器卸载`)
   }
-  const dsh = pickDsh()
-  onProgress({ phase: 'resolve', text: `用 dsh ${dsh.version} 卸载 ${packageName}…` })
+  const dir = profileDir(PROFILE)
+  onProgress({ phase: 'resolve', text: `正在卸载 ${packageName}…` })
 
   if (!Object.prototype.hasOwnProperty.call(manifestDeps(), packageName)) {
     throw new Error(`${packageName} 不在 profile 的依赖里，无法卸载`)
   }
 
   /*
-   * 卸载也要带 RELEASE_AGE_BYPASS。
+   * `pnpm remove` 会**校验整个 lockfile** 的供应链策略 —— 只要 lockfile 里有
+   * 一条"发布太新"的记录（哪怕不涉及本次卸载），整条命令就会被拒绝
+   * （`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`）。`runPnpm` 统一带了
+   * `--config.minimumReleaseAge=0`，所以这里不必再传。
    *
-   * `pnpm remove` 同样会**校验整个 lockfile** 的供应链策略 —— 只要 lockfile 里有
-   * 一条"发布太新"的记录（哪怕是别的包、哪怕不涉及本次卸载），整条命令就会被拒绝：
-   *   [ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] …
-   *   The lockfile contains entries that the active policies reject.
-   * 实测：用户卸载 dsh-tavern 时被 dsh-tavern@2.5.0 与它的传递依赖 dsh-muv-engine@0.3.10
-   * 两条"太新"记录挡住，退出码 1。
-   *
-   * 卸载**不会引入任何新包**，所以绕过发布年龄策略没有供应链风险。
+   * 卸载**不引入任何新包**，绕过发布年龄策略没有供应链风险。
    */
-  const outcome = await run(
-    [dsh.bin, 'plugin', '--profile', PROFILE, 'remove', packageName, RELEASE_AGE_BYPASS],
-    (line) =>
-    progressLine(line, onProgress)
-  )
+  const outcome = await runPnpm(dir, ['remove', packageName], (line) => progressLine(line, onProgress))
   if (outcome.code !== 0) {
     throw new Error(`卸载 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`)
   }
@@ -423,6 +283,10 @@ export async function uninstallPlugin(
     throw new Error(
       `命令成功退出，但 ${packageName} 仍在 profile 清单里\n${outcome.tail.slice(-10).join('\n')}`
     )
+  }
+  // dsh 原本会自己 reconcile 启用清单；绕开它就得自己把它摘掉，否则残留一条指向已卸包的记录
+  if (removeFromBundles(dir, packageName)) {
+    onProgress({ phase: 'done', text: `${packageName} 已从启用清单移除` })
   }
   onProgress({ phase: 'done', text: `${packageName} 已卸载` })
 }
@@ -457,42 +321,20 @@ export async function updatePlugin(
     throw new Error(`目标版本不合法：${target}`)
   }
 
-  const dsh = pickDsh()
+  const dir = profileDir(PROFILE)
   onProgress({ phase: 'resolve', text: `把 ${packageName} 更新到 ${target}…` })
 
   /*
-   * 先**不带**发布年龄绕过跑一次 —— 尊重那道护栏是默认行为。
-   * 只有两种证据出现时，才带绕着重试一次（这是 dshmarket 的做法：
-   * 它的 recovery 路径 release-age-violation 就是这么处理的）：
-   *   · 命令失败，且输出里出现发布年龄的特征
-   *   · 命令**成功但版本没变** —— pnpm 那道闸是"静默保留旧版本、退出码 0"，
-   *     只查清单会把它当成更新成功（我上次就栽在这里）
+   * 用 `add <包>@<版本>` 而不是 pnpm 的 `update`：`update` 受 package.json 里的范围约束
+   * （`^0.19.1` 不会跨到 `0.20.0`），会出现"界面说有新版、点了却没动"。显式指定版本，
+   * 按钮承诺什么就装什么。
+   *
+   * 发布年龄那道闸已由 `runPnpm` 统一关掉（`--config.minimumReleaseAge=0`）——
+   * 它遇到刚发布的版本会**静默保留旧版本、退出码 0**，不关掉就会出现"点了更新、版本没变"。
    */
   const addSpec = `${packageName}@${target}`
-  const attempt = (extra: string[]): Promise<{ code: number; tail: string[] }> =>
-    run([dsh.bin, 'plugin', '--profile', PROFILE, 'add', addSpec, ...extra], (line) =>
-      progressLine(line, onProgress)
-    )
+  const outcome = await addWithRollback(dir, addSpec, (line) => progressLine(line, onProgress))
 
-  let outcome = await attempt([])
-  let text = outcome.tail.join('\n')
-  if (outcome.code !== 0 && !/release|minimumReleaseAge|too young/i.test(text)) {
-    // 不是发布年龄的问题 —— 直接按失败报出去，不做无依据的重试
-    throw new Error(
-      `更新 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`
-    )
-  }
-  const landed = (): boolean => installedVersion(packageName) === target
-  if (!landed()) {
-    onProgress({
-      phase: 'resolve',
-      text:
-        outcome.code === 0
-          ? `版本没有变化（pnpm 的最小发布年龄保护会静默保留旧版本），带 ${RELEASE_AGE_BYPASS} 重试一次…`
-          : `输出里出现发布年龄特征，带 ${RELEASE_AGE_BYPASS} 重试一次…`
-    })
-    outcome = await attempt([RELEASE_AGE_BYPASS])
-  }
   if (outcome.code !== 0) {
     throw new Error(
       `更新 ${packageName} 失败（退出码 ${outcome.code}）：\n${outcome.tail.slice(-10).join('\n')}`
@@ -503,14 +345,13 @@ export async function updatePlugin(
     throw new Error(`命令成功退出，但 ${packageName} 从 profile 清单里消失了`)
   }
   /*
-   * **核对真正装上的版本**，不能只看清单 —— 这就是上次把"什么都没发生"当成
-   * 更新成功的原因（用户看到"已更新到 1.61.0"，实际磁盘上还是 1.47.0）。
+   * **核对真正装上的版本**，不能只看清单 —— 否则会把"什么都没发生"当成更新成功
+   * （用户看到"已更新到 1.61.0"，实际磁盘上还是 1.47.0）。
    */
   const installed = installedVersion(packageName)
   if (installed !== target) {
     throw new Error(
       `命令成功退出，但 ${packageName} 实际装的仍是 ${installed ?? '(读不到版本)'}，不是 ${target}。\n` +
-        `已经带 ${RELEASE_AGE_BYPASS} 重试过仍然如此，说明是别的原因（不是发布年龄）。\n` +
         `${outcome.tail.slice(-10).join('\n')}`
     )
   }

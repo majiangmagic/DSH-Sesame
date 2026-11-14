@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SampleTag from '@/components/SampleTag.vue'
-import { api, SAMPLE_DATA, type SettingsPayload, type LauncherUpdateInfo } from '@/api'
+import { api, SAMPLE_DATA, type SettingsPayload, type LauncherUpdateInfo, type SettingsPaths } from '@/api'
 import { useLocaleStore } from '@/stores/locale'
 import type { LocaleName } from '@/i18n'
 
@@ -31,6 +31,8 @@ const { t } = useI18n()
 const uiLang = useLocaleStore()
 
 const draft = ref<SettingsPayload | null>(null)
+/** 各项目录解析后的真实路径（留空时默认落在哪），由主进程算好 */
+const paths = ref<SettingsPaths | null>(null)
 const savedHint = ref('')
 
 /**
@@ -83,10 +85,17 @@ async function pickDshHome(): Promise<void> {
   if (picked !== null && draft.value) draft.value.dshHome = picked
 }
 
+async function pickPluginsDir(): Promise<void> {
+  const picked = await window.sesame.window.pickDirectory()
+  if (picked !== null && draft.value) draft.value.pluginsDir = picked
+}
+
 async function save(): Promise<void> {
   if (!draft.value) return
   const next = await api.saveSettings({ ...draft.value })
   draft.value = next
+  // 目录项改了以后"实际位置"那几行要跟着变（留空 → 默认，填了 → 就是它）
+  paths.value = await api.getSettingsPaths()
   savedHint.value = t('settings.saved')
 }
 
@@ -157,6 +166,7 @@ let offUpdateProgress: (() => void) | null = null
 
 onMounted(async () => {
   draft.value = await api.getSettings()
+  paths.value = await api.getSettingsPaths()
   offUpdateProgress = api.onLauncherUpdateProgress((event) => {
     updateProgress.value = event.text
   })
@@ -243,6 +253,39 @@ onBeforeUnmount(() => offUpdateProgress?.())
           </button>
         </div>
       </label>
+
+      <!--
+        插件母版目录。留空 = 用默认（<DSH_HOME>/profiles/base）。
+        **必须是一个 profile 目录**：`dsh plugin --profile <name>` 只认
+        `$DSH_HOME/profiles/<name>`，所以指到别处时会用 junction 把 `base` 链过去。
+      -->
+      <label class="form-row wide">
+        <span>{{ t('settings.pluginsDir') }}</span>
+        <div class="inline-input">
+          <input
+            id="pluginsDir"
+            type="text"
+            spellcheck="false"
+            autocomplete="off"
+            :placeholder="t('settings.pluginsDirPlaceholder')"
+            v-model="draft.pluginsDir"
+          />
+          <button class="subtle-button" id="pickPluginsDir" type="button" @click="pickPluginsDir">
+            {{ t('settings.browse') }}
+          </button>
+        </div>
+      </label>
+
+      <!-- 三个目录解析后的真实位置：留空到底落在哪，一眼可见，不再依赖模糊的占位符 -->
+      <p class="status-line" id="pathHints">
+        <template v-if="paths">
+          {{ t('settings.actualPath') }}<br />
+          {{ t('settings.dshHome') }}：{{ paths.dshHome }}<br />
+          {{ t('settings.poolDir') }}：{{ paths.poolDir }}<br />
+          {{ t('settings.snapshotDir') }}：{{ paths.snapshotDir }}<br />
+          {{ t('settings.pluginsDir') }}：{{ paths.pluginsDir }}
+        </template>
+      </p>
 
       <label class="form-row">
         <span>{{ t('settings.port') }}</span>

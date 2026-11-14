@@ -1,9 +1,13 @@
 import type { MarketCapabilities, MarketCatalog, MarketPlugin, MarketSelfUpdate } from '@shared/types/plugins'
+import type { PluginBaseSource, PluginBaseStatus } from '@shared/types/plugins'
 import type { PluginEntry, PluginList, PluginReason } from '@shared/types/plugins'
 import type { VersionOverview, VersionStatus } from '@shared/types/versions'
 import type { DiagnosisResult } from '@shared/types/control'
 import type { RestoreResult, SnapshotEntry, SnapshotPaths, SnapshotPreview } from '@shared/types/snapshots'
 import type { LauncherUpdateInfo, LauncherUpdateProgressEvent } from '@shared/types/update'
+import type { SettingsPaths } from '@shared/types/settings'
+
+export type { SettingsPaths }
 
 /**
  * 接口契约 —— 只有类型，没有实现。
@@ -23,6 +27,8 @@ export type {
   MarketPlugin,
   MarketSelfUpdate,
   PluginEntry,
+  PluginBaseSource,
+  PluginBaseStatus,
   PluginList,
   PluginReason,
   VersionOverview,
@@ -58,6 +64,11 @@ export interface SettingsPayload {
   dshHome: string,
   snapshotDir: string
   poolDir: string
+  /**
+   * 插件母版目录。空串 = 关闭母版模式（各 profile 自己管插件）。
+   * 非空时装/升/卸/开关都只改它，启动 web 与桌面端前从它克隆到各自 profile。
+   */
+  pluginsDir: string
 }
 
 export interface RunningState {
@@ -103,6 +114,15 @@ export interface ManagerApi {
   getPlugins(): Promise<PluginList>
 
   /**
+   * 插件**母版**状态。母版是插件的唯一写入点，`initialized: false` 时禁止启动 dsh，
+   * 界面必须弹窗让用户选一次基线（以 web 还是桌面端现有的插件为准）。
+   */
+  getPluginBase(): Promise<PluginBaseStatus>
+
+  /** 用指定 profile 现有的插件初始化母版（一次性；已初始化会直接返回现状） */
+  initPluginBase(source: PluginBaseSource): Promise<PluginBaseStatus>
+
+  /**
    * 限时启动一次当前版本并解析 dsh 自己的失败诊断，返回**有问题的插件**。
    * 会真的起 dsh（用完即停）。
    */
@@ -125,6 +145,9 @@ export interface ManagerApi {
   getSettings(): Promise<SettingsPayload>
   /** 合并写入设置；开机自启会同步到系统（仅打包后） */
   saveSettings(patch: Partial<SettingsPayload>): Promise<SettingsPayload>
+
+  /** 各项目录解析后的**真实路径**（留空时默认落在哪），供设置页显示 */
+  getSettingsPaths(): Promise<SettingsPaths>
   setPluginEnabled(pluginName: string, enabled: boolean): Promise<void>
 
   /* ---------------- 终端 ---------------- */

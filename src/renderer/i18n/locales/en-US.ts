@@ -203,10 +203,14 @@ const enUS: typeof zhCN = {
     modeDesktop: 'Desktop',
     port: 'Web port',
     poolDir: 'Version location',
-    poolDirPlaceholder: 'default <app directory>/dsh',
+    poolDirPlaceholder: 'empty = default (see actual paths below)',
     snapshotDir: 'Snapshot folder',
-    snapshotDirPlaceholder: 'default <app directory>/snapshots',    dshHome: 'Data directory (DSH_HOME)',
+    snapshotDirPlaceholder: 'empty = default (see actual paths below)',
+    dshHome: 'Data directory (DSH_HOME)',
     dshHomePlaceholder: 'default <user home>/.dsh',
+    pluginsDir: 'Plugins directory',
+    pluginsDirPlaceholder: 'empty = default (see actual paths below)',
+    actualPath: 'Actual paths:',
     uiLang: 'Interface language',
     args: 'Extra startup arguments',
     argsPlaceholder: '--log-level debug',
@@ -248,6 +252,22 @@ const enUS: typeof zhCN = {
     title: 'DSH-S has exited',
     sub: 'The manager has stopped; this page can be closed.',
     close: 'Close page'
+  },
+
+  /** First-run dialog: pick the plugin baseline. Plugins are distributed from the base only. */
+  baseSetup: {
+    title: 'Choose the plugin baseline',
+    intro:
+      'Plugins now have a single source (the base). Pick which side\u2019s **existing** plugins should be copied into it \u2014 the web profile and the desktop app will both use that set from now on, and installing or updating a plugin happens in the base too.',
+    webName: 'Use the web profile\u2019s plugins',
+    webHint: 'Copies what the web profile has installed right now. Pick this if you mostly use dsh in the browser.',
+    desktopName: 'Use the desktop app\u2019s plugins',
+    desktopHint: 'Copies what the desktop app has installed right now. Pick this if you mostly use the desktop app.',
+    noSkip: 'This step cannot be skipped: dsh will not start until you choose. The dialog reappears on every start attempt until then.',
+    useWeb: 'Use web plugins',
+    useDesktop: 'Use desktop plugins',
+    working: 'Copying plugins\u2026',
+    cancelStart: 'Do not start'
   }
 }
 

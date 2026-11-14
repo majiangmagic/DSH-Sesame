@@ -130,10 +130,14 @@ function uninstallCommand(plugin: MarketPlugin): string {
  * 优先目录给的（npm 条目都有）；只有 GitHub 的条目目录不给版本，退回**已装版本** ——
  * 否则装完之后那一行连版本都没有，看起来像没装好。
  */
+/**
+ * 行上显示的版本号。
+ *
+ * 由 store 的 `versionLabel` 统一决定（已装 → 显示已装版本；有更新 → `旧 → 新`），
+ * 组件不自己挑字段 —— 之前这里优先取目录版本，导致已装插件的行和更新按钮显示同一个数字。
+ */
 function displayVersion(plugin: MarketPlugin): string {
-  const fromCatalog = String(plugin.version ?? '').trim()
-  if (fromCatalog !== '') return fromCatalog
-  return market.installedVersionOf(plugin)
+  return market.versionLabel(plugin)
 }
 
 onMounted(() => {
@@ -260,7 +264,7 @@ onMounted(() => {
           <div class="market-main">
             <div class="market-name">
               <span class="market-pkg">{{ plugin.name }}</span>
-              <span v-if="displayVersion(plugin)" class="market-version">v{{ displayVersion(plugin) }}</span>
+              <span v-if="displayVersion(plugin)" class="market-version">{{ displayVersion(plugin) }}</span>
               <span v-if="market.isInstalled(plugin)" class="tag muted">{{ t('status.installed') }}</span>
               <span v-if="market.sameIdentityCount(plugin) > 1" class="tag muted" :title="t('market.sameNameHint')">
                 {{ t('market.sameName', { count: market.sameIdentityCount(plugin) }) }}

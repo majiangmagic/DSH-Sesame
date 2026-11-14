@@ -129,3 +129,27 @@ export interface MarketSelfUpdate {
   registryLatest: string | null
   errors: string[]
 }
+
+/* ============================ 插件母版 ============================ */
+
+/** 插件母版的初始化来源：把哪个 profile 现有的插件搬进母版 */
+export type PluginBaseSource = 'web' | 'desktop'
+
+/**
+ * 插件母版的状态。
+ *
+ * 母版是插件的**唯一写入点**（装 / 升 / 卸 / 开关都只改它），启动 web 与桌面端前
+ * 从它克隆到各自 profile。`initialized: false` 表示还没选基线 —— 此时**禁止启动 dsh**，
+ * 界面要弹窗让用户选一次。
+ */
+export interface PluginBaseStatus {
+  /** 母版目录的绝对路径 */
+  dir: string
+  initialized: boolean
+  /** 当初从哪个 profile 导入的；未初始化时为空串 */
+  source: PluginBaseSource | ''
+  /** 初始化时间（ISO） */
+  at: string
+  /** 母版里的插件数量 */
+  plugins: number
+}

@@ -101,8 +101,29 @@ export const useVersionsStore = defineStore('versions', () => {
     }
   }
 
+  /**
+   * 插件母版尚未初始化：**拦住启动**，交给界面弹窗让用户选一次基线。
+   *
+   * 没有"稍后再说"——用户点取消就是不启动，下次点启动还会再问，直到真的做出选择。
+   * 见 `renderer/domain/control/BaseSetupDialog.vue`。
+   */
+  const basePending = ref(false)
+  /** 因为母版未初始化而被拦下的那次启动目标版本（选完基线后自动续上） */
+  const pendingStart = ref('')
+
   async function start(version: string): Promise<void> {
     if (isBusy.value || version === '') return
+    // 母版未初始化 → 立刻拦住，一次网络/IO 都不做（否则会拿着一套来源不明的插件启动）
+    try {
+      const base = await api.getPluginBase()
+      if (!base.initialized) {
+        pendingStart.value = version
+        basePending.value = true
+        return
+      }
+    } catch {
+      // 查不到就让主进程再挡一次（那边也有闸门），别因为一次 IPC 失败连启动都不给
+    }
     action.value = 'starting'
     error.value = ''
     progressText.value = ''
@@ -178,7 +199,30 @@ export const useVersionsStore = defineStore('versions', () => {
     error.value = ''
   }
 
+  /**
+   * 用户选完基线后调用：把刚才被拦下的那次启动续上。
+   *
+   * 注意这里**只续一次**——选完基线后才允许启动，之后母版已初始化，闸门自然不再拦。
+   */
+  async function resumeAfterBase(): Promise<void> {
+    const version = pendingStart.value
+    basePending.value = false
+    pendingStart.value = ''
+    if (version !== '') await start(version)
+  }
+
+  /** 用户关掉弹窗：**只是这次不启动**，母版仍未初始化，下次点启动还会被拦 */
+  function cancelBase(): void {
+    basePending.value = false
+    pendingStart.value = ''
+    error.value = ''
+  }
+
   return {
+    basePending,
+    pendingStart,
+    resumeAfterBase,
+    cancelBase,
     overview,
     loading,
     busy,

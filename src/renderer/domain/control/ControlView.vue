@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import PluginPanel from '@/domain/plugins/PluginPanel.vue'
+import BaseSetupDialog from './BaseSetupDialog.vue'
 import ProgressBar from '@/components/ProgressBar.vue'
 import VersionSelect, { type VersionOption } from '@/domain/versions/VersionSelect.vue'
 import { useVersionsStore } from '@/domain/versions/stores/versions'
@@ -284,4 +285,14 @@ onMounted(async () => {
     </div>
   </div>
   </Teleport>
+
+  <!--
+    插件母版未初始化时**禁止启动**：点启动只会弹出这个，选完基线才真正开始。
+    关掉它 = 本次不启动，下次点启动还会再问 —— 没有"跳过"这个出口。
+  -->
+  <BaseSetupDialog
+    v-if="versions.basePending"
+    @done="versions.resumeAfterBase()"
+    @cancel="versions.cancelBase()"
+  />
 </template>
