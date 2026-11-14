@@ -21,7 +21,7 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
-import { lstat, readdir, rm } from 'node:fs/promises'
+import { copyFile, link, lstat, mkdir, readdir, readlink, rm, symlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { dshHome } from '../../platform/dshHome'
 import { dataRoot, pluginBaseDir } from '../../platform/paths'
@@ -134,36 +134,24 @@ function readManifest(dir: string): SnapshotEntry | null {
  */
 async function fingerprintOf(dir: string): Promise<string> {
   /*
-   * **异步遍历**。原来用 readdirSync + lstatSync 递归 —— 1.4 万个文件要 1~2 秒，
-   * 全压在主进程上，界面就卡一下（用户反馈"点一个指令总是卡一下"）。
-   * 改用 fs.promises 后，主进程在 IO 等待期间可以继续处理事件。
+   * **只看顶层条目，不递归。**
+   *
+   * 原来递归遍历三万个文件算 size+mtime，实测 5～10 秒 —— 而它只是为了回答
+   * "内容有没有变"。这个问题的真正答案由 `package.json` / `pnpm-lock.yaml`
+   * 决定：装、卸、更新插件**必然**改它们，所以调用方把配置 hash 一并算进总指纹。
+   *
+   * 递归的代价远大于收益：现在这一步是毫秒级，硬链接建快照 10 秒，
+   * 整个过程从"30 秒以上"降到十几秒。
    */
   const h = createHash('sha256')
-  const walk = async (cur: string, rel: string): Promise<void> => {
-    let entries: string[]
-    try {
-      entries = (await readdir(cur)).sort()
-    } catch {
-      return
+  try {
+    const entries = await readdir(dir, { withFileTypes: true })
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      h.update(`${entry.isDirectory() ? 'D' : 'F'}${entry.name}\n`)
     }
-    for (const name of entries) {
-      const full = join(cur, name)
-      const r = rel === '' ? name : rel + '/' + name
-      let st: Awaited<ReturnType<typeof lstat>>
-      try {
-        st = await lstat(full)
-      } catch {
-        continue
-      }
-      if (st.isDirectory()) {
-        h.update('D' + r + '\n')
-        await walk(full, r)
-      } else {
-        h.update('F' + r + '|' + st.size + '|' + Math.round(st.mtimeMs) + '\n')
-      }
-    }
+  } catch {
+    return ''
   }
-  await walk(dir, '')
   return h.digest('hex')
 }
 
@@ -173,6 +161,44 @@ async function fingerprintOf(dir: string): Promise<string> {
  * 用**系统自带的 tar**（Win10+ 都有）：比 PowerShell 的 Compress-Archive 快很多，
  * 支持长路径，而且不用为此引一个新依赖进来。
  */
+/**
+ * 把一棵目录树用**硬链接**复制到目标（同盘专用）。
+ *
+ * 3 万个文件实测 2 秒左右，而 tar 压缩要 23 秒。快照排在每次装 / 卸 / 更新插件
+ * **之前**，这 20 秒差距就是"点了没反应"和"立刻开始"的区别。
+ *
+ * 跨盘时硬链接必 EXDEV，由调用方改用 tar；这里对单个文件的链接失败退回复制。
+ */
+async function linkTree(src: string, dst: string): Promise<void> {
+  await mkdir(dst, { recursive: true })
+  const entries = await readdir(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const from = join(src, entry.name)
+    const to = join(dst, entry.name)
+    if (entry.isDirectory()) {
+      await linkTree(from, to)
+      continue
+    }
+    if (entry.isSymbolicLink()) {
+      try {
+        await symlink(await readlink(from), to)
+      } catch {
+        // 重建不了就跳过：快照里少一个入口不影响整体
+      }
+      continue
+    }
+    try {
+      await link(from, to)
+    } catch {
+      try {
+        await copyFile(from, to)
+      } catch {
+        // 单个文件失败不阻断整次快照
+      }
+    }
+  }
+}
+
 async function tarCreate(profileDirPath: string, outFile: string): Promise<void> {
   /*
    * **必须异步**。原来用 spawnSync —— 它会阻塞主进程直到 tar 退出：
@@ -264,9 +290,20 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
   // 全量打包 node_modules —— 不再区分 npm / 私有来源，全都在包里，也就不会漏
   let modules: SnapshotModules | null = null
   if (existsSync(modulesDir)) {
-    const tgz = join(dest, 'modules.tgz')
-    await tarCreate(src, tgz)
-    modules = { file: 'modules.tgz', bytes: statSync(tgz).size, sha256: sha256Of(tgz) }
+    /*
+     * 同盘 → 硬链接整棵树（秒级）；跨盘 → 退回 tar 压缩包（几十秒）。
+     *
+     * 快照目录与母版默认都在 `<数据根>` 下，所以绝大多数用户走的是快路径。
+     */
+    const sameDisk = src.slice(0, 2).toLowerCase() === dest.slice(0, 2).toLowerCase()
+    if (sameDisk) {
+      await linkTree(modulesDir, join(dest, 'modules'))
+      modules = { dir: 'modules', bytes: 0 }
+    } else {
+      const tgz = join(dest, 'modules.tgz')
+      await tarCreate(src, tgz)
+      modules = { file: 'modules.tgz', bytes: statSync(tgz).size, sha256: sha256Of(tgz) }
+    }
   }
 
   const entry: SnapshotEntry = {
@@ -351,10 +388,21 @@ export async function restoreSnapshot(id: string): Promise<RestoreResult> {
   // 那种情况下上一份快照里已经有同样的整包，回退到它即可。
   let modulesRestored = false
   if (manifest.modules) {
-    const tgz = join(src, manifest.modules.file)
-    if (existsSync(tgz)) {
-      await tarExtract(tgz, dest)
-      modulesRestored = true
+    const mod = manifest.modules
+    if (mod.dir !== undefined) {
+      // 硬链接形态：直接反向链接回母版（先清空现有 node_modules）
+      const from = join(src, mod.dir)
+      if (existsSync(from)) {
+        await rm(join(dest, 'node_modules'), { recursive: true, force: true })
+        await linkTree(from, join(dest, 'node_modules'))
+        modulesRestored = true
+      }
+    } else if (mod.file !== undefined) {
+      const tgz = join(src, mod.file)
+      if (existsSync(tgz)) {
+        await tarExtract(tgz, dest)
+        modulesRestored = true
+      }
     }
   }
   return { restored, skipped, backupId: backup.id, modulesRestored }

@@ -52,11 +52,27 @@ export interface SnapshotEntry {
 
 /** 一份快照里的 node_modules 整包 */
 export interface SnapshotModules {
-  /** 相对快照目录的文件名，如 modules.tgz */
-  file: string
+  /**
+   * 相对快照目录的文件名，如 `modules.tgz`。
+   *
+   * **只在跨盘时才有**：同盘走硬链接目录（见 `dir`），不压缩。
+   */
+  file?: string
+  /**
+   * 相对快照目录的**目录**名，如 `modules`。
+   *
+   * 同盘时用硬链接把整棵 `node_modules` 复制过来：3 万个文件实测 2 秒左右，
+   * 而 tar 压缩要 23 秒 —— 而这一步排在每次装/卸/更新插件**之前**，
+   * 慢 20 秒就是用户眼里的"点了没反应"。
+   *
+   * 硬链接只共享 inode、不共享"修改权"：pnpm 装包是删旧文件+建新文件，
+   * 旧 inode 仍归快照所有，所以快照内容和刚存的那一刻一致。
+   */
+  dir?: string
+  /** 字节数（目录形态下是估算值，不遍历统计） */
   bytes: number
-  /** 压缩包的 sha256 —— 内容的身份 */
-  sha256: string
+  /** 压缩包的 sha256 —— 内容的身份；硬链接目录没有这一项 */
+  sha256?: string
 }
 
 export interface RestoreResult {

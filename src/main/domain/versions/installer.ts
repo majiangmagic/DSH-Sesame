@@ -1,10 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createStreamDecoder } from '../../platform/textDecode'
-
-/** 安装 dsh 版本的兜底超时（下载 + 解压 + 依赖安装） */
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { versionBin, versionDir } from '../../platform/paths'
+import { bundledPnpmScript, requireNode } from '../../platform/runtime'
 import { registryUrl } from '../../platform/registry'
 import { currentRun } from '../control/runner'
 import { VERSION_RE } from './versions'
@@ -54,13 +53,20 @@ interface NpmCommand {
   file: string
   /** npm-cli.js 的路径；为空表示直接用 file（PATH 上的 npm） */
   cli: string | null
+  /** 用 pnpm 代跑（机器上没装 npm 时的回退） */
+  via?: 'pnpm'
 }
 
 /**
- * 定位 npm。
+ * 定位 npm，找不到就回退到**自带的 pnpm**。
  *
- * 优先用 `node <npm-cli.js>`：不经 shell、不碰 .cmd，跨平台最稳（Node 在 Windows 上直接 spawn
- * `.cmd` 会 EINVAL）。找不到 npm-cli.js 才退回 PATH 上的 npm，并交给 shell 执行。
+ * 原实现只查 PATH，于是"机器上没装 Node"的用户连 dsh 版本都下不了 ——
+ * 尽管启动器自带 node 与 pnpm。错误信息还让人去装 Node，方向完全错了。
+ *
+ * 顺序：
+ *   1. PATH 上的 node + 同级 `npm-cli.js`（最理想：不碰 .cmd，Windows 上 spawn `.cmd` 会 EINVAL）
+ *   2. PATH 上的 npm
+ *   3. **自带 pnpm**（回退；用 hoisted 布局装，尽量接近 npm 的扁平结构）
  */
 function resolveNpm(): NpmCommand | { error: string } {
   const node = findOnPath('node')
@@ -70,8 +76,27 @@ function resolveNpm(): NpmCommand | { error: string } {
   }
   const npm = findOnPath('npm')
   if (npm) return { file: npm, cli: null }
+
+  /*
+   * 回退：用自带的 node + 自带 pnpm。
+   *
+   * `--config.node-linker=hoisted` 让依赖扁平铺在 `node_modules` 下（而不是 npm/pnpm
+   * 各自的嵌套或软链结构），dsh 的加载器按普通路径就能找到它们。
+   */
+  const pnpmScript = bundledPnpmScript()
+  if (pnpmScript !== null) {
+    try {
+      const runtime = requireNode()
+      return { file: runtime.path, cli: pnpmScript, via: 'pnpm' }
+    } catch {
+      // 连自带 node 都不在 —— 落到下面的错误
+    }
+  }
+
   return {
-    error: ' 在 PATH 上找不到 node / npm。请先安装 Node.js 22.19+ 或 24+，再重试下载。'
+    error:
+      '找不到可用的包管理器：PATH 上没有 node/npm，自带运行时也不完整。\n' +
+      '请重新安装 DSH-Sesame（安装包自带 node 与 pnpm），或在系统里装一个 Node.js 22.19+ / 24+。'
   }
 }
 
@@ -180,18 +205,38 @@ export async function installVersion(
   onProgress({ phase: 'resolve', text: `正在解析 @deepseek-ai/dsh@${version} 的依赖…` })
 
   let lastText = ''
+  /*
+   * npm 走 `install`；回退到自带 pnpm 时走 `add`。
+   *
+   * pnpm 额外固定两点：
+   * · `--config.node-linker=hoisted` —— 依赖扁平铺在 node_modules 下，
+   *   dsh 的加载器按普通路径就能找到（不加会变成 .pnpm 软链结构）
+   * · `--config.minimumReleaseAge=0` —— 否则刚发布的版本会被静默跳过
+   */
+  const installArgs =
+    npm.via === 'pnpm'
+      ? [
+          'add',
+          `@deepseek-ai/dsh@${version}`,
+          '--prod',
+          '--config.node-linker=hoisted',
+          '--config.minimumReleaseAge=0',
+          '--reporter=append-only'
+        ]
+      : [
+          'install',
+          `@deepseek-ai/dsh@${version}`,
+          '--omit=dev',
+          '--no-audit',
+          '--no-fund',
+          '--package-lock=false',
+          '--loglevel=http',
+          '--no-progress'
+        ]
+
   const result = await run(
     npm,
-    [
-      'install',
-      `@deepseek-ai/dsh@${version}`,
-      '--omit=dev',
-      '--no-audit',
-      '--no-fund',
-      '--package-lock=false',
-      '--loglevel=http',
-      '--no-progress'
-    ],
+    installArgs,
     {
       cwd: root,
       onLine: (line) => {
