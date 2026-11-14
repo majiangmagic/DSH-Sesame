@@ -43,7 +43,7 @@ function findOnPath(): string | null {
 }
 
 /** 自带运行时：<app>/node/node.exe（打包后即 exe 旁边的 node/） */
-function bundledNode(): string | null {
+export function bundledNode(): string | null {
   const root = app.isPackaged ? process.resourcesPath.replace(/resources[\\/]?$/, '') : app.getAppPath()
   for (const candidate of [join(root, 'node', 'node.exe'), join(root, 'node', 'node')]) {
     if (existsSync(candidate)) return candidate

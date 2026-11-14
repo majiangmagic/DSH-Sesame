@@ -361,8 +361,13 @@ function assertSafeSnapshotId(id: string): void {
 /**
  * 回退到指定快照。
  *
- * **先自动存一份当前状态**（trigger='pre-rollback'）—— 否则回退本身不可逆，
- * 回退错了就全丢了。这一步和 dsh-plugin-guard 的做法一致。
+ * **只回退，不再新建快照。**
+ *
+ * 原来这里会先 `createSnapshot('pre-rollback', …)` 存一份"回退前"，理由是"回退本身
+ * 不可逆"。代价是：每点一次回退，列表里就多一份"回退前"，10 份上限很快被这些
+ * 中间产物填满，**真正要保留的历史反而被挤掉** —— 快照列表变得完全看不懂。
+ *
+ * 现在回退就是回退到已记录的那一刻，列表只反映用户主动存过的状态。
  *
  * 只写回文件；`node_modules` 是否随之更新由界面提示，不在这一步自动跑 pnpm。
  */
@@ -373,7 +378,6 @@ export async function restoreSnapshot(id: string): Promise<RestoreResult> {
   const manifest = readManifest(src)
   if (!manifest) throw new Error(`快照缺少 manifest.json：${id}`)
 
-  const backup = await createSnapshot('pre-rollback', `回退到 ${id} 之前`)
   const dest = sourceDir()
 
   const restored: string[] = []
@@ -405,7 +409,7 @@ export async function restoreSnapshot(id: string): Promise<RestoreResult> {
       }
     }
   }
-  return { restored, skipped, backupId: backup.id, modulesRestored }
+  return { restored, skipped, modulesRestored }
 }
 
 /**

@@ -3,7 +3,7 @@ import { createStreamDecoder } from '../../platform/textDecode'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { versionBin, versionDir } from '../../platform/paths'
-import { bundledPnpmScript, requireNode } from '../../platform/runtime'
+import { bundledNode, bundledPnpmScript, requireNode } from '../../platform/runtime'
 import { registryUrl } from '../../platform/registry'
 import { currentRun } from '../control/runner'
 import { VERSION_RE } from './versions'
@@ -58,45 +58,59 @@ interface NpmCommand {
 }
 
 /**
- * 定位 npm，找不到就回退到**自带的 pnpm**。
+ * 定位包管理器。**内置 node 优先**，其次才是 PATH。
  *
- * 原实现只查 PATH，于是"机器上没装 Node"的用户连 dsh 版本都下不了 ——
- * 尽管启动器自带 node 与 pnpm。错误信息还让人去装 Node，方向完全错了。
+ * 为什么强制优先内置：自带的是随包发布的、我们验证过的版本；PATH 上那个完全不可控
+ * （实测有台机器上的 node 不接受 `--use-system-ca`，整个 dsh 起不来）。
+ * 既然带了运行时，就不该把"能不能跑"交给用户环境。
  *
- * 顺序：
- *   1. PATH 上的 node + 同级 `npm-cli.js`（最理想：不碰 .cmd，Windows 上 spawn `.cmd` 会 EINVAL）
- *   2. PATH 上的 npm
- *   3. **自带 pnpm**（回退；用 hoisted 布局装，尽量接近 npm 的扁平结构）
+ * 顺序（包管理器尽量保持 npm，避免把版本池的布局换成 pnpm 那套）：
+ *   1. 内置 node + PATH 上的 `npm-cli.js` —— node 用内置，npm 保持原样
+ *   2. 内置 node + 内置 pnpm —— PATH 上没有 npm 时
+ *   3. PATH 上的 node + 同级 `npm-cli.js` —— 内置运行时缺失（不该发生）
+ *   4. PATH 上的 npm
  */
 function resolveNpm(): NpmCommand | { error: string } {
-  const node = findOnPath('node')
-  if (node) {
-    const cli = join(dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js')
-    if (existsSync(cli)) return { file: node, cli }
+  const bundled = bundledNode()
+  const pathNode = findOnPath('node')
+
+  /** 某个 node 旁边有没有 npm 的入口脚本 */
+  const npmCliBeside = (nodePath: string | null): string | null => {
+    if (nodePath === null) return null
+    const cli = join(dirname(nodePath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+    return existsSync(cli) ? cli : null
   }
+
+  const pnpmScript = bundledPnpmScript()
+
+  // 1) 内置 node + PATH 上的 npm（布局不变，最理想）
+  const pathCli = npmCliBeside(pathNode)
+  if (bundled !== null && pathCli !== null) return { file: bundled, cli: pathCli }
+
+  // 2) 内置 node + 内置 pnpm
+  if (bundled !== null && pnpmScript !== null) return { file: bundled, cli: pnpmScript, via: 'pnpm' }
+
+  // 3) PATH 上的 node + 同级 npm-cli.js
+  if (pathNode !== null && pathCli !== null) return { file: pathNode, cli: pathCli }
+
+  // 4) PATH 上的 npm
   const npm = findOnPath('npm')
   if (npm) return { file: npm, cli: null }
 
-  /*
-   * 回退：用自带的 node + 自带 pnpm。
-   *
-   * `--config.node-linker=hoisted` 让依赖扁平铺在 `node_modules` 下（而不是 npm/pnpm
-   * 各自的嵌套或软链结构），dsh 的加载器按普通路径就能找到它们。
-   */
-  const pnpmScript = bundledPnpmScript()
+  // 5) 只剩内置 pnpm（理论上被第 2 条覆盖，留作兜底）
   if (pnpmScript !== null) {
     try {
       const runtime = requireNode()
       return { file: runtime.path, cli: pnpmScript, via: 'pnpm' }
     } catch {
-      // 连自带 node 都不在 —— 落到下面的错误
+      // 掉到下面的错误
     }
   }
 
   return {
     error:
-      '找不到可用的包管理器：PATH 上没有 node/npm，自带运行时也不完整。\n' +
-      '请重新安装 DSH-Sesame（安装包自带 node 与 pnpm），或在系统里装一个 Node.js 22.19+ / 24+。'
+      '找不到可用的包管理器：内置运行时缺失，PATH 上也没有 node/npm。\n' +
+      '请重新安装 DSH-Sesame（安装包自带 node 与 pnpm）。'
   }
 }
 

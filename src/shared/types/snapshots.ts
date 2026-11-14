@@ -80,8 +80,12 @@ export interface RestoreResult {
   restored: string[]
   /** 快照里没有、因而没动的文件 */
   skipped: string[]
-  /** 回退前自动存的那份（便于反悔） */
-  backupId: string
+  /**
+ * 回退前自动存的快照 id。
+ *
+ * **现在恒为 null**：回退不再顺手新建快照（那会让列表被"回退前"塞满）。
+ * 字段保留是为了不破坏渲染层契约，将来若要恢复"可撤销回退"再填值。
+ */
   /** node_modules 整包是否也解回去了（快照里没有整包时为 false） */
   modulesRestored: boolean
 }

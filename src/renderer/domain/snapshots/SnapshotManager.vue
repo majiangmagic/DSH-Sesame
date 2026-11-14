@@ -78,7 +78,7 @@ async function restore(id: string): Promise<void> {
   try {
     const r = await api.restoreSnapshot(id)
     await refresh()
-    toast.showBubble(t('snap.restored', { n: r.restored.length, backup: r.backupId }))
+    toast.showBubble(t('snap.restored', { n: r.restored.length }))
   } catch (cause) {
     toast.showBubble(cause instanceof Error ? cause.message : String(cause))
   } finally {

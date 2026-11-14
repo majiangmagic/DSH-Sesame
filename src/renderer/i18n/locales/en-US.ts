@@ -24,7 +24,7 @@ const enUS: typeof zhCN = {
     files: "files",
     keep: 'Up to 10 snapshots per profile; the oldest is removed when exceeded. A snapshot is created automatically before plugin changes.',
     created: 'Snapshot created',
-    restored: 'Restored {n} files (pre-rollback snapshot: {backup})',
+    restored: 'Restored {n} files',
   },
   check: {
     busy: 'Checking, please wait.',

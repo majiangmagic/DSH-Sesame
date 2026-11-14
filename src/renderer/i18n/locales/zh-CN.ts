@@ -22,7 +22,7 @@ export default {
     files: "个文件",
     keep: '每个配置最多保留 10 份，超出时删除最早的一份；插件变更前会自动创建快照。',
     created: '快照已创建',
-    restored: '已还原 {n} 个文件（回退前快照：{backup}）',
+    restored: '已还原 {n} 个文件',
   },
   check: {
     button: "检查",
