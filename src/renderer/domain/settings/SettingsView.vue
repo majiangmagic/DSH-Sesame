@@ -267,9 +267,9 @@ onBeforeUnmount(() => offUpdateProgress?.())
       </label>
 
       <!--
-        插件母版目录。留空 = 用默认（<DSH_HOME>/profiles/base）。
+        插件母版目录。留空 = 用默认（<数据目录>/plugins）。
         **必须是一个 profile 目录**：`dsh plugin --profile <name>` 只认
-        `$DSH_HOME/profiles/<name>`，所以指到别处时会用 junction 把 `base` 链过去。
+        装插件用 pnpm 直接写这里，不经过 dsh 的 `plugin` 命令，所以它不必是 dsh 的 profile。
       -->
       <label class="form-row wide">
         <span>{{ t('settings.pluginsDir') }}</span>

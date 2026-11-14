@@ -39,18 +39,16 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  lstatSync,
   readlinkSync,
-  renameSync,
   rmSync,
   statSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs'
 import { cp, copyFile, rm } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { profileDir } from '../../platform/dshHome'
-import { pluginBaseDir, pluginBaseTarget } from '../../platform/paths'
+import { pluginBaseDir } from '../../platform/paths'
 import { patchPathOf } from '../plugins/pluginState'
 import {
   alignDisabledFlags,
@@ -103,9 +101,10 @@ function readMarker(dir: string): Marker | null {
     const raw = JSON.parse(readFileSync(join(dir, MARKER), 'utf8')) as Partial<Marker>
     if (raw.initialized !== true) return null
     const source = raw.source === 'web' || raw.source === 'desktop' ? raw.source : null
-    if (source === null) return null
-    return { initialized: true, source, at: typeof raw.at === 'string' ? raw.at : '' }
+    if (source === null || typeof raw.at !== 'string') return null
+    return { initialized: true, source, at: raw.at }
   } catch {
+    // 标记文件不存在 / 读不动 / 不是合法 JSON —— 都当成"没初始化"
     return null
   }
 }
@@ -120,84 +119,6 @@ export function basePluginCount(dir = pluginBaseDir()): number {
   } catch {
     return 0
   }
-}
-
-/**
- * 早期版本给母版起过带下划线的名字，用户不希望 profile 名以下划线开头 —— 这里做一次改名。
- *
- * 只在"旧名存在、新名还不存在"时改名；失败就继续用旧的（不阻断启动）。
- */
-function migrateLegacyProfileName(): void {
-  const legacy = join(dirname(pluginBaseDir()), '_base')
-  const current = pluginBaseDir()
-  if (!existsSync(legacy) || existsSync(current)) return
-  try {
-    renameSync(legacy, current)
-  } catch {
-    // 改不动（被占用 / 权限）就留在旧名上，反正调用方拿到的是 pluginBaseDir()
-  }
-}
-
-/**
- * 确保母版目录就位，必要时建立 **junction**。
- *
- * 背景：`dsh plugin --profile <name>` 只认 `$DSH_HOME/profiles/<name>`，所以母版必须
- * 叫 `base` 放在那里。用户在设置里指定了别的目录时，把 `profiles/base` 做成一个
- * 指向它的 junction —— dsh 照旧按 `profiles/base` 访问，内容实际落在用户指定的盘。
- *
- * @returns 母版的实际路径（即 `profiles/base`，可能是个链接）
- * @throws `base` 已存在且不是链接、又和用户指定的目录冲突时（此时不能擅自动用户数据）
- */
-export function ensureBaseLink(): string {
-  migrateLegacyProfileName()
-  const link = pluginBaseDir()
-  const target = pluginBaseTarget()
-
-  // 没指定自定义目录 → 就用 profiles/base 本身
-  if (target === '') return link
-
-  const wanted = resolve(target)
-  if (wanted === resolve(link)) return link
-
-  mkdirSync(dirname(link), { recursive: true })
-
-  let exists = false
-  try {
-    const stat = lstatSync(link)
-    exists = true
-    if (stat.isSymbolicLink()) {
-      const current = readlinkSync(link).replace(/^\\\\\?\\/, '')
-      if (resolve(current) === wanted) return link
-      throw new Error(
-        `插件目录链接已指向别处：${link} → ${current}\n` +
-          `设置里要的是 ${wanted}。请先在「设置」里改回原值，或手动删掉那个链接。`
-      )
-    }
-  } catch (cause) {
-    if (!exists) {
-      // 不存在：下面建
-    } else if (cause instanceof Error) {
-      throw cause
-    }
-  }
-
-  if (exists) {
-    // 真实目录且非空 —— 里面可能已经有插件，绝不擅自替换
-    throw new Error(
-      `${link} 是一个真实目录，但设置里指定了不同的插件目录（${wanted}）。\n` +
-        `请先把它的内容移到目标位置（或删掉空目录），然后重试。`
-    )
-  }
-
-  mkdirSync(wanted, { recursive: true })
-  try {
-    symlinkSync(wanted, link, 'junction')
-  } catch (cause) {
-    throw new Error(
-      `无法把插件目录链接到 ${wanted}：${cause instanceof Error ? cause.message : String(cause)}`
-    )
-  }
-  return link
 }
 
 /** 母版当前状态。`initialized` 同时要求标记文件与 `package.json` 都在 —— 缺一个都算没初始化。 */
@@ -305,7 +226,7 @@ export async function initBaseFromProfile(
   source: BaseSource,
   onProgress: (text: string) => void = () => {}
 ): Promise<BaseStatus> {
-  const base = ensureBaseLink()
+  const base = pluginBaseDir()
   const existing = baseStatus()
   if (existing.initialized) {
     onProgress(`插件母版已初始化（来源 ${existing.source}，${existing.plugins} 个插件），跳过`)
@@ -458,7 +379,7 @@ export async function cloneBaseToProfile(
   target: BaseSource,
   onProgress: (text: string) => void = () => {}
 ): Promise<CloneReport> {
-  const base = ensureBaseLink()
+  const base = pluginBaseDir()
   const status = baseStatus()
   if (!status.initialized) {
     throw new Error('插件母版还没有初始化（尚未选择以 web 还是桌面端的插件为基线）')

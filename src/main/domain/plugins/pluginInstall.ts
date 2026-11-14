@@ -1,8 +1,7 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { repoOfSpec } from '@utils/pluginTarget'
-import { profileDir } from '../../platform/dshHome'
-import { BASE_PROFILE } from '../../platform/paths'
+import { pluginBaseDir } from '../../platform/paths'
 import { addToBundles, allowBuildFor, removeFromBundles, runPnpm, type PnpmOutcome } from './localPnpm'
 
 /**
@@ -39,21 +38,23 @@ export interface PluginProgress {
 }
 
 /**
- * 插件操作的 profile 名 —— **母版**（$DSH_HOME/profiles/base）。
+ * 插件操作的目录 —— **母版**（默认 `<数据根>/plugins`，即 `D:\DSH-Sesame-data\plugins`）。
  *
  * 插件只有一个写入点：装 / 升 / 卸 / 开关都落在这里，启动 web 与桌面端前再从母版
- * 克隆到各自的 profile（见 domain/control/pluginBase.ts）。
+ * 克隆到各自的 profile（见 `domain/control/pluginBase.ts`）。
  *
- * 为什么必须用"profile 名"而不是直接给目录：dsh plugin --profile <name> 只接受名字，
- * 固定解析到 $DSH_HOME/profiles/<name>。用户把插件目录指到别处时，base 是个
- * junction，dsh 照旧按这个名字访问。
+ * 它**不是** dsh 的 profile：启动器用 pnpm 直接装、不经过 `dsh plugin` 命令，
+ * 所以母版不需要叫某个 profile 名，也不必待在 `$DSH_HOME/profiles` 下 ——
+ * 放在数据目录里，跟 `dsh` / `desktop` / `snapshots` 并排，升级不会清空。
  */
-const PROFILE = BASE_PROFILE
+function baseDir(): string {
+  return pluginBaseDir()
+}
 
 /** 读 profile 清单里的 dependencies */
 function manifestDeps(): Record<string, string> {
   try {
-    const raw = readFileSync(join(profileDir(PROFILE), 'package.json'), 'utf8')
+    const raw = readFileSync(join(baseDir(), 'package.json'), 'utf8')
     const manifest = JSON.parse(raw) as { dependencies?: Record<string, string> }
     return manifest.dependencies ?? {}
   } catch {
@@ -92,7 +93,7 @@ function findInstalledKey(spec: string, deps: Record<string, string>): string | 
 function installedVersion(packageName: string): string | null {
   try {
     const raw = readFileSync(
-      join(profileDir(PROFILE), 'node_modules', packageName, 'package.json'),
+      join(baseDir(), 'node_modules', packageName, 'package.json'),
       'utf8'
     )
     return (JSON.parse(raw) as { version?: string }).version ?? null
@@ -205,7 +206,7 @@ export async function installPlugin(
   // 以 `-` 开头会被 pnpm 当成选项（`--registry=…`），不是包名
   if (target.startsWith('-')) throw new Error(`安装目标不合法：${target}`)
 
-  const dir = profileDir(PROFILE)
+  const dir = baseDir()
   if (!existsSync(join(dir, 'package.json'))) {
     throw new Error(
       '插件母版还没有初始化：请先在插件页选择以「Web 端」还是「桌面端」现有的插件作为基线。'
@@ -260,7 +261,7 @@ export async function uninstallPlugin(
   if (packageName.startsWith('@deepseek-ai/')) {
     throw new Error(`${packageName} 是 dsh 官方组件，不允许从启动器卸载`)
   }
-  const dir = profileDir(PROFILE)
+  const dir = baseDir()
   onProgress({ phase: 'resolve', text: `正在卸载 ${packageName}…` })
 
   if (!Object.prototype.hasOwnProperty.call(manifestDeps(), packageName)) {
@@ -321,7 +322,7 @@ export async function updatePlugin(
     throw new Error(`目标版本不合法：${target}`)
   }
 
-  const dir = profileDir(PROFILE)
+  const dir = baseDir()
   onProgress({ phase: 'resolve', text: `把 ${packageName} 更新到 ${target}…` })
 
   /*

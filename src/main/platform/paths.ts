@@ -2,7 +2,6 @@ import { cpSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { app } from 'electron'
 import { readSettings } from './settings'
-import { dshHome } from './dshHome'
 
 /**
  * DSH-Sesame 的数据根目录。
@@ -112,29 +111,24 @@ export function versionRoot(): string {
 }
 
 /**
- * **插件母版**的 profile 名。
+ * **插件母版**目录：插件的唯一写入点。
  *
- * 为什么必须是一个"profile 名"而不是任意目录：
- * `dsh plugin --profile <name>` 只接受名字，且**固定解析到 `$DSH_HOME/profiles/<name>`**
- * （`bin.js` 里 `--profile` 的说明原文：*the profile under $DSH_HOME/profiles to boot*）。
- * 把母版放在别处，dsh 的 CLI 就够不着它，"在母版里装插件"这件事根本无法实现。
+ * 默认在**数据根**下（`<数据根>/plugins`），和 `dsh`、`desktop`、`snapshots` 并排 ——
+ * 数据根本身在安装目录隔壁，升级不会清空。
  *
- * 所以母版永远是 `<DSH_HOME>/profiles/base`；用户想让它落在别的盘/别的目录时，
- * 用 **junction** 把 `base` 指过去（见 `pluginBase.ts` 的 `ensureBaseLink`）——
- * dsh 仍然按 `profiles/base` 访问，路径不变，内容在用户指定的位置。
+ * ⚠️ 刻意**不放在 `<DSH_HOME>/profiles/` 下**：那是 dsh 自己的 profile 空间（会被 dsh
+ * 当成可启动的 profile、也更容易被人连同 `.dsh` 一起打包分享出去）。启动器装插件用的是
+ * pnpm，不经过 dsh 的 `plugin` 命令，所以母版**不需要**是 profile，放哪都行。
+ *
+ * 设了 `pluginsDir` 就用用户的（可以指到别的盘）。
  */
-export const BASE_PROFILE = 'base'
-
-/** 母版目录（`<DSH_HOME>/profiles/base`，可能是一个指向用户自定义位置的 junction） */
 export function pluginBaseDir(): string {
-  return join(dshHome(), 'profiles', BASE_PROFILE)
+  const fromSettings = readSettings().pluginsDir
+  if (typeof fromSettings === 'string' && fromSettings.trim() !== '') return fromSettings.trim()
+  return join(dataRoot(), 'plugins')
 }
 
-/**
- * 用户在设置里指定的母版**目标**目录；没设就是空串（= 直接用 `profiles/base`）。
- *
- * 非空且不在 `profiles/` 下时，`base` 会变成指向它的 junction。
- */
+/** 用户在设置里指定的母版目录；没设就是空串（= 用 `<数据根>/plugins`） */
 export function pluginBaseTarget(): string {
   const fromSettings = readSettings().pluginsDir
   return typeof fromSettings === 'string' ? fromSettings.trim() : ''

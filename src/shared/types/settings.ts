@@ -52,6 +52,6 @@ export interface SettingsPaths {
   poolDir: string
   /** 快照根（<数据根>/snapshots） */
   snapshotDir: string
-  /** 插件母版（<DSH_HOME>/profiles/base，可能是指向自定义位置的链接） */
+  /** 插件母版（默认 <数据目录>/plugins） */
   pluginsDir: string
 }

@@ -1,11 +1,9 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { MARKET_CHANNELS, PLUGIN_CHANNELS } from '@shared/constants/channels'
 import type { PluginProgressEvent } from '@shared/types/events'
-import { profileDir } from '../platform/dshHome'
-import { BASE_PROFILE } from '../platform/paths'
+import { pluginBaseDir } from '../platform/paths'
 import { pushTagged } from '../domain/terminal/logbus'
 import {
-  assessProfile,
   checkMarketUpdate,
   listSnapshots,
   loadCatalog,
@@ -25,7 +23,7 @@ import { autoSnapshotBefore } from '../domain/plugins/guard'
  * 插件开关默认作用于 `web` profile（`DSH_HOME` 可覆盖，dsh 自身也是这个规则）。
  */
 export function registerPluginsIpc(): void {
-  ipcMain.handle(PLUGIN_CHANNELS.list, () => listPlugins(profileDir(BASE_PROFILE)))
+  ipcMain.handle(PLUGIN_CHANNELS.list, () => listPlugins(pluginBaseDir()))
 
   /*
    * 插件母版：状态查询与初始化。
@@ -67,7 +65,7 @@ export function registerPluginsIpc(): void {
        * 安装 / 升级 / 卸载**仍然**存快照 —— 那三个真会动 `node_modules`，不可一键复原。
        */
       pushTagged('启动器', `${enabled ? '开启' : '关闭'}插件 ${packageName}`)
-      const dir = profileDir(BASE_PROFILE)
+      const dir = pluginBaseDir()
 
       /*
        * **不在这里写桌面端。** 只改 web —— 桌面端的那份由 `syncWebToDesktop` 在**启动前对齐**
@@ -180,23 +178,13 @@ export function registerPluginsIpc(): void {
       registryLatest: check.registryLatest,
       errors: check.errors,
       // 顺带把兼容性与快照能力也报上来，界面据此决定显示哪些入口
-      compatibility: handle.capabilities.available ? safe(() => assessProfile(profileDirName())) : null,
-      snapshots: handle.capabilities.available ? safe(() => listSnapshots(profileDir(BASE_PROFILE))) : null
+      // 母版不是 profile，也不做版本兼容判定（用户明确要求不检查这类版本信息）
+      compatibility: null,
+      snapshots: handle.capabilities.available ? safe(() => listSnapshots(pluginBaseDir())) : null
     }
   })
 }
 
-/**
- * 取 profile 名（固定 web）；单独抽出来是因为市场模块的入参是"名字"而不是目录。
- *
- * **不读 `DSH_PROFILE`。** 那个变量是启动器**写给孩子进程**的（告诉 dsh 用哪个 profile），
- * 反过来决定启动器自己的行为就是方向错了 —— 用户机器上一个残留值会悄悄改变
- * "插件开关作用在哪个 profile 上"。启动器的基准 profile 是常量，不受环境变量影响。
- * （可写：envFor 仍然会把当前 profile 传给 dsh；只是启动器自己不再回头读它。）
- */
-function profileDirName(): string {
-  return BASE_PROFILE
-}
 
 /** 探测用：内部 API 缺失时不要让它把 IPC 调用变成异常 */
 function safe<T>(fn: () => T): T | null {
