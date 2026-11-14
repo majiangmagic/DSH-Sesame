@@ -289,10 +289,16 @@ onMounted(async () => {
   <!--
     插件母版未初始化时**禁止启动**：点启动只会弹出这个，选完基线才真正开始。
     关掉它 = 本次不启动，下次点启动还会再问 —— 没有"跳过"这个出口。
+
+    ⚠️ **必须 Teleport 到 body**，和上面那个诊断弹窗同一个理由（见 L228 的注释）：
+    `#view-control` 的祖先带 transform / filter，`position: fixed` 的遮罩会被限制在
+    那个祖先内、盖在卡片下面 —— 表现就是"弹窗出来了但按钮点不动"（实测过两次）。
   -->
-  <BaseSetupDialog
-    v-if="versions.basePending"
-    @done="versions.resumeAfterBase()"
-    @cancel="versions.cancelBase()"
-  />
+  <Teleport to="body">
+    <BaseSetupDialog
+      v-if="versions.basePending"
+      @done="versions.resumeAfterBase()"
+      @cancel="versions.cancelBase()"
+    />
+  </Teleport>
 </template>

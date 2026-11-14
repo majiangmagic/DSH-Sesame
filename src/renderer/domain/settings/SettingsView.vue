@@ -33,6 +33,18 @@ const uiLang = useLocaleStore()
 const draft = ref<SettingsPayload | null>(null)
 /** 各项目录解析后的真实路径（留空时默认落在哪），由主进程算好 */
 const paths = ref<SettingsPaths | null>(null)
+
+/**
+ * 输入框的占位符：留空时**实际**会落在哪个路径。
+ *
+ * 以前是四行静态文案（"默认<软件目录>/dsh"），既和真实位置对不上，又把卡片撑高
+ * 顶出可视区。现在把解析后的路径直接塞进占位符 —— 信息更准确，也不占额外行。
+ */
+function hintFor(kind: keyof SettingsPaths): string {
+  const base = t('settings.leaveEmptyDefault')
+  const resolved = paths.value?.[kind]
+  return resolved ? `${base}（${resolved}）` : base
+}
 const savedHint = ref('')
 
 /**
@@ -211,7 +223,7 @@ onBeforeUnmount(() => offUpdateProgress?.())
             type="text"
             spellcheck="false"
             autocomplete="off"
-            :placeholder="t('settings.dshHomePlaceholder')"
+            :placeholder="hintFor('dshHome')"
             v-model="draft.dshHome"
           />
           <button class="subtle-button" id="pickDshHome" type="button" @click="pickDshHome">
@@ -228,7 +240,7 @@ onBeforeUnmount(() => offUpdateProgress?.())
             type="text"
             spellcheck="false"
             autocomplete="off"
-            :placeholder="t('settings.snapshotDirPlaceholder')"
+            :placeholder="hintFor('snapshotDir')"
             v-model="draft.snapshotDir"
           />
           <button class="subtle-button" id="pickSnapshotDir" type="button" @click="pickSnapshotDir">
@@ -245,7 +257,7 @@ onBeforeUnmount(() => offUpdateProgress?.())
             type="text"
             spellcheck="false"
             autocomplete="off"
-            :placeholder="t('settings.poolDirPlaceholder')"
+            :placeholder="hintFor('poolDir')"
             v-model="draft.poolDir"
           />
           <button class="subtle-button" id="pickPoolDir" type="button" @click="pickPoolDir">
@@ -267,7 +279,7 @@ onBeforeUnmount(() => offUpdateProgress?.())
             type="text"
             spellcheck="false"
             autocomplete="off"
-            :placeholder="t('settings.pluginsDirPlaceholder')"
+            :placeholder="hintFor('pluginsDir')"
             v-model="draft.pluginsDir"
           />
           <button class="subtle-button" id="pickPluginsDir" type="button" @click="pickPluginsDir">
@@ -275,17 +287,6 @@ onBeforeUnmount(() => offUpdateProgress?.())
           </button>
         </div>
       </label>
-
-      <!-- 三个目录解析后的真实位置：留空到底落在哪，一眼可见，不再依赖模糊的占位符 -->
-      <p class="status-line" id="pathHints">
-        <template v-if="paths">
-          {{ t('settings.actualPath') }}<br />
-          {{ t('settings.dshHome') }}：{{ paths.dshHome }}<br />
-          {{ t('settings.poolDir') }}：{{ paths.poolDir }}<br />
-          {{ t('settings.snapshotDir') }}：{{ paths.snapshotDir }}<br />
-          {{ t('settings.pluginsDir') }}：{{ paths.pluginsDir }}
-        </template>
-      </p>
 
       <label class="form-row">
         <span>{{ t('settings.port') }}</span>

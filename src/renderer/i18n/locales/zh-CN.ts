@@ -210,7 +210,7 @@ export default {
 
     pluginsDir: '插件目录',
     pluginsDirPlaceholder: '留空 = 用默认（实际位置见下方）',
-    actualPath: '实际位置：',
+    leaveEmptyDefault: '留空 = 用默认',
     uiLang: '界面语言',
     args: '额外启动参数',
     argsPlaceholder: '--log-level debug',
@@ -259,16 +259,13 @@ export default {
   /** 首次选择「插件基线」的弹窗。插件只从母版分发，没选基线就不允许启动 */
   baseSetup: {
     title: '先选择插件基线',
-    intro:
-      '插件现在只有一个来源（母版）。请选择把哪一端**现有**的插件复制进母版 —— 之后 Web 端和桌面端都用这一套，装插件、更新插件也都在母版里进行。',
     webName: '用 Web 端现有的插件',
     webHint: '把当前 Web 端已装的插件原样复制进母版。如果你平时主要在网页界面里用 dsh，选这个。',
     desktopName: '用桌面端现有的插件',
     desktopHint: '把当前桌面端已装的插件原样复制进母版。如果你主要在桌面端里用，选这个。',
-    noSkip: '这一步不能跳过：不做选择就无法启动 dsh。这个弹窗会在每次点启动时出现，直到做出选择。',
     useWeb: '用 Web 端的插件',
     useDesktop: '用桌面端的插件',
-    working: '正在复制插件…',
+    working: '正在复制插件（约 500 MB，需要十几秒），请稍候…',
     cancelStart: '暂不启动'
   }
 }

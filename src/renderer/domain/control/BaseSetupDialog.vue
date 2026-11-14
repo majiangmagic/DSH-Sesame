@@ -39,25 +39,24 @@ async function pick(source: PluginBaseSource): Promise<void> {
     <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="baseSetupTitle">
       <h2 class="confirm-title" id="baseSetupTitle">{{ t('baseSetup.title') }}</h2>
 
-      <p class="confirm-risk">{{ t('baseSetup.intro') }}</p>
-
       <div class="confirm-items">
         <div class="confirm-item">
           <div class="confirm-target">
             <div class="confirm-name">{{ t('baseSetup.webName') }}</div>
           </div>
-          <p class="confirm-risk">{{ t('baseSetup.webHint') }}</p>
+          <p class="confirm-notes">{{ t('baseSetup.webHint') }}</p>
         </div>
         <div class="confirm-item">
           <div class="confirm-target">
             <div class="confirm-name">{{ t('baseSetup.desktopName') }}</div>
           </div>
-          <p class="confirm-risk">{{ t('baseSetup.desktopHint') }}</p>
+          <p class="confirm-notes">{{ t('baseSetup.desktopHint') }}</p>
         </div>
       </div>
 
+      <!-- 只有这一句是真的"警告"（说了不能跳过），所以只有它用 confirm-risk 的红样式 -->
       <p class="confirm-risk">{{ t('baseSetup.noSkip') }}</p>
-      <p v-if="error" class="confirm-risk" style="color: var(--danger)">{{ error }}</p>
+      <p v-if="error" class="confirm-risk">{{ error }}</p>
 
       <div class="confirm-actions">
         <button type="button" class="main-button" :disabled="busy !== ''" @click="pick('web')">

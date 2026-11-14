@@ -34,7 +34,6 @@
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
-  cpSync,
   existsSync,
   linkSync,
   mkdirSync,
@@ -48,6 +47,7 @@ import {
   symlinkSync,
   writeFileSync
 } from 'node:fs'
+import { cp, copyFile, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { profileDir } from '../../platform/dshHome'
 import { pluginBaseDir, pluginBaseTarget } from '../../platform/paths'
@@ -264,8 +264,12 @@ function cloneTree(
  *
  * 这里刻意**不用硬链接**：母版之后会被 pnpm 写入（装/升/卸），硬链接会让母版的改动
  * 同时改到源 profile 上。初始化是一次性动作，多花十几秒换隔离。
+ *
+ * ⚠️ **必须异步复制**（`cp` 而不是 `cpSync`）：74 MB 的 node_modules 复制要十几秒，
+ * 同步版本会把 Electron 主进程整个占住 —— 窗口在此期间完全不响应，用户点任何按钮都没反应
+ * （表现出来就是"弹窗点了没动静"）。同一课在 `tarCreate` / 快照那边已经吃过一次。
  */
-function copyIntoBase(source: string, base: string): { files: number } {
+async function copyIntoBase(source: string, base: string): Promise<{ files: number }> {
   let files = 0
   /*
    * 整目录复制（而不是只挑那 5 个文件）：profile 里除了 package.json / lock / patch，
@@ -277,15 +281,15 @@ function copyIntoBase(source: string, base: string): { files: number } {
     const from = join(source, entry.name)
     const to = join(base, entry.name)
     if (entry.isDirectory()) {
-      cpSync(from, to, { recursive: true })
+      await cp(from, to, { recursive: true })
     } else {
-      copyFileSync(from, to)
+      await copyFile(from, to)
     }
     files += 1
   }
   const modules = join(source, 'node_modules')
   if (existsSync(modules)) {
-    cpSync(modules, join(base, 'node_modules'), { recursive: true, verbatimSymlinks: true })
+    await cp(modules, join(base, 'node_modules'), { recursive: true, verbatimSymlinks: true })
     files += 1
   }
   return { files }
@@ -324,7 +328,7 @@ export async function initBaseFromProfile(
     if (entry.name === MARKER) continue // 标记文件本来就代表"已初始化"，走到这里说明要重做
     rmSync(join(base, entry.name), { recursive: true, force: true })
   }
-  const copied = copyIntoBase(from, base)
+  const copied = await copyIntoBase(from, base)
 
   const marker: Marker = { initialized: true, source, at: new Date().toISOString() }
   writeFileSync(join(base, MARKER), `${JSON.stringify(marker, null, 2)}\n`, 'utf8')
@@ -475,10 +479,10 @@ export async function cloneBaseToProfile(
     const to = join(dest, entry.name)
     try {
       if (entry.isDirectory()) {
-        rmSync(to, { recursive: true, force: true })
-        cpSync(from, to, { recursive: true })
+        await rm(to, { recursive: true, force: true })
+        await cp(from, to, { recursive: true })
       } else {
-        copyFileSync(from, to)
+        await copyFile(from, to)
       }
     } catch (cause) {
       // 单个条目失败不该让整次启动失败（典型是目标端文件被占用）
@@ -504,7 +508,7 @@ export async function cloneBaseToProfile(
   }
 
   // node_modules：整棵重建（含 .pnpm，否则符号链接会断）
-  rmSync(destModules, { recursive: true, force: true })
+  await rm(destModules, { recursive: true, force: true })
   const sourceModules = join(base, 'node_modules')
   const stats = { files: 0, linked: 0, copied: 0, bytes: 0 }
 
@@ -514,9 +518,13 @@ export async function cloneBaseToProfile(
       mkdirSync(destModules, { recursive: true })
       cloneTree(sourceModules, destModules, stats)
     } else {
-      // 跨盘：硬链接必定 EXDEV，直接走原生递归复制（比逐文件快一倍）
+      /*
+       * 跨盘：硬链接必定 EXDEV，直接走原生递归复制（比逐文件快一倍）。
+       * **必须 `await cp`**，不能 `cpSync` —— 474 MB 同步复制会把主进程占满十几秒，
+       * 界面在此期间完全无响应（用户点按钮得不到任何反馈，看起来就是"点了没动静"）。
+       */
       onProgress(`母版在另一个盘，正在复制插件到 ${target}（约十几秒）…`)
-      cpSync(sourceModules, destModules, { recursive: true, verbatimSymlinks: true })
+      await cp(sourceModules, destModules, { recursive: true, verbatimSymlinks: true })
       const size = dirSize(destModules)
       stats.files = countFiles(destModules)
       stats.copied = stats.files
