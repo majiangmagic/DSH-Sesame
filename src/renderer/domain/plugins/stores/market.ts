@@ -484,7 +484,8 @@ export const useMarketStore = defineStore('market', () => {
       await api.installPlugin(target.target, (progress) => {
         progressText.value = progress.text
       })
-      await load(true)
+      // 只刷新「已装」：目录（10974 条）没有变化，重拉一遍纯浪费时间
+      await refreshInstalled()
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -509,7 +510,8 @@ export const useMarketStore = defineStore('market', () => {
       await api.updatePlugin(name, target, (progress) => {
         progressText.value = progress.text
       })
-      await load(true)
+      // 只刷新「已装」：目录（10974 条）没有变化，重拉一遍纯浪费时间
+      await refreshInstalled()
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -541,7 +543,8 @@ export const useMarketStore = defineStore('market', () => {
       await api.uninstallPlugin(name, (progress) => {
         progressText.value = progress.text
       })
-      await load(true)
+      // 只刷新「已装」：目录（10974 条）没有变化，重拉一遍纯浪费时间
+      await refreshInstalled()
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {

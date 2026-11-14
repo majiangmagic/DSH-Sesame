@@ -9,6 +9,7 @@ import {
   useMarketStore,
   type MarketSort
 } from '@/domain/plugins/stores/market'
+import { usePluginsStore } from '@/domain/plugins/stores/plugins'
 import type { MarketPlugin } from '@/api'
 
 /**
@@ -25,6 +26,8 @@ import type { MarketPlugin } from '@/api'
  */
 const { t } = useI18n()
 const market = useMarketStore()
+/** 本地已装列表（控制页那块）。市场里装/卸完要同步刷新，否则两边不一致 */
+const localPlugins = usePluginsStore()
 
 /**
  * 缩略图加载失败的时间戳（URL → 失败时刻）。
@@ -138,6 +141,28 @@ function uninstallCommand(plugin: MarketPlugin): string {
  */
 function displayVersion(plugin: MarketPlugin): string {
   return market.versionLabel(plugin)
+}
+
+/**
+ * 市场里的三个动作都要**同时刷新本地已装列表**。
+ *
+ * market 与 plugins 是两个 store：前者管目录与"装了什么"，后者管控制页那块
+ * 已装清单。原来只刷前者 —— 在市场里装完插件，切回控制页看到的还是旧列表，
+ * 表现为"装了但没装上"。
+ */
+async function installFromMarket(plugin: MarketPlugin): Promise<void> {
+  await market.install(plugin)
+  await localPlugins.load()
+}
+
+async function uninstallFromMarket(plugin: MarketPlugin): Promise<void> {
+  await market.uninstall(plugin)
+  await localPlugins.load()
+}
+
+async function updateFromMarket(plugin: MarketPlugin): Promise<void> {
+  await market.update(identityOf(plugin), market.updateTarget(plugin))
+  await localPlugins.load()
 }
 
 onMounted(() => {
@@ -313,7 +338,7 @@ onMounted(() => {
               type="button"
               :disabled="market.busyFor(plugin)"
               :title="t('market.updateTitle', { version: market.updateTarget(plugin) })"
-              @click="market.update(identityOf(plugin), market.updateTarget(plugin))"
+              @click="updateFromMarket(plugin)"
             >
               {{
                 market.busyFor(plugin)
@@ -329,7 +354,7 @@ onMounted(() => {
               type="button"
               :disabled="market.busyFor(plugin)"
               :title="t('market.uninstallTitle', { command: uninstallCommand(plugin) })"
-              @click="market.uninstall(plugin)"
+              @click="uninstallFromMarket(plugin)"
             >
               {{
                 market.busyFor(plugin) ? t('market.uninstalling') : t('market.uninstall')
@@ -351,7 +376,7 @@ onMounted(() => {
                   ? t('market.installTitle', { command: installCommand(plugin) })
                   : t('market.noSourceHint')
               "
-              @click="market.install(plugin)"
+              @click="installFromMarket(plugin)"
             >
               {{ market.busyFor(plugin) ? t('market.installing') : t('market.install') }}
             </button>

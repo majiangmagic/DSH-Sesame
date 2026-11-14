@@ -1,4 +1,4 @@
-﻿import { createRequire } from 'node:module'
+import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { registryUrl } from '../../platform/registry'
 
@@ -249,7 +249,12 @@ export async function checkMarketUpdate(
   let registryLatest: string | null = null
   try {
     const res = await fetch(`${registryUrl()}/${encodeURIComponent(packageName)}/latest`, {
-      headers: { accept: 'application/json', 'user-agent': 'dsh-sesame/0.1.0' }
+      headers: { accept: 'application/json', 'user-agent': 'dsh-sesame/0.1.0' },
+      /*
+       * Node 的 fetch 没有默认超时：registry 卡住（连接建起来不回数据）时这个 await
+       * 会一直挂着 —— 设置页的"检查更新"就停在那儿，和自更新那边是同一个坑。
+       */
+      signal: AbortSignal.timeout(15_000)
     })
     if (res.ok) {
       const body = (await res.json()) as { version?: unknown }

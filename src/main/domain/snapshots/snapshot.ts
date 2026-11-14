@@ -50,8 +50,9 @@ export const SNAPSHOT_FILES = [
   'cordis.patch.yml'
 ] as const
 
-/** 每个 profile 最多保留多少份 */
+/** 最多保留多少份 */
 export const SNAPSHOT_KEEP = 10
+
 
 /**
  * 快照锚定的**存档范围** —— 现在是「插件母版」，不再是某个 profile。
@@ -285,13 +286,18 @@ export async function createSnapshot(trigger: SnapshotTrigger, label = ''): Prom
   return entry
 }
 
-/** 超出保留数就删最旧的 */
+/**
+ * 超出保留数就删最旧的。
+ *
+ * **只按份数，不按体积**：快照会随着插件变多而变大，这是预期内的 —— 用总体积去
+ * 卡会变成"插件一装大，昨晚那份就被悄悄删了"，比占盘更糟。
+ */
 async function prune(): Promise<void> {
   const dir = dirOf()
   if (!existsSync(dir)) return
   const ids = readdirSync(dir).sort() // 时间戳命名 ⇒ 字典序即时间序
   const excess = ids.length - SNAPSHOT_KEEP
-  for (let i = 0; i < excess; i++) {
+  for (let i = 0; i < excess; i += 1) {
     await rm(join(dir, ids[i]), { recursive: true, force: true })
   }
 }

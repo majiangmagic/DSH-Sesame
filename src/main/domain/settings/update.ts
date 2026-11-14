@@ -24,6 +24,22 @@ import { parseLatestYml, releaseAssetUrl, releasePageUrl, repoSlugFrom } from '.
 const INSTALLER_ARGS = ['/S', '--updated', '--force-run']
 
 /**
+ * 网络超时。
+ *
+ * ⚠️ 这些不是可选项：**Electron 的 `net.request` 只有 `error` 事件，没有内置超时**。
+ * GitHub 的连接建起来却不回数据时（代理挂住、CDN 卡住、被丢包），Promise 永远不
+ * resolve —— 界面就停在"检查更新中"/"正在下载 N%"，用户看到的就是"更新卡死"。
+ *
+ * 下载用**空闲超时**而不是总超时：137 MB 在慢速网络上可能十几分钟，卡死检测看的是
+ * "多久没有新数据"，不是"总共花了多久"。
+ */
+const FETCH_TIMEOUT_MS = 15_000
+/** 连上后迟迟没有响应头 */
+const CONNECT_TIMEOUT_MS = 30_000
+/** 下载过程中多久没有新数据就判死 */
+const DOWNLOAD_IDLE_TIMEOUT_MS = 60_000
+
+/**
  * 更新过程日志（`<userData>/update.log`）。
  *
  * 为什么需要：更新失败时应用已经退出，终端页那份内存缓冲跟着没了 —— 用户只看到
@@ -117,8 +133,32 @@ function repoSlug(): string {
  */
 function getText(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    let settled = false
+    let timer: NodeJS.Timeout | null = null
     const request = net.request(url)
-    request.on('error', (error: Error) => reject(new Error(`网络请求失败：${error.message}`)))
+
+    const finish = (error: Error | null, value?: string): void => {
+      if (settled) return
+      settled = true
+      if (timer !== null) clearTimeout(timer)
+      if (error !== null) reject(error)
+      else resolve(value ?? '')
+    }
+
+    /*
+     * 没有这个定时器，一次"连接建起来但不回数据"就会让检查更新永远转圈 ——
+     * 这就是用户报的"更新卡死"最可能的来源。
+     */
+    timer = setTimeout(() => {
+      finish(new Error(`请求超时（${FETCH_TIMEOUT_MS / 1000} 秒没有响应）`))
+      try {
+        request.abort()
+      } catch {
+        // 已经结束了就忽略
+      }
+    }, FETCH_TIMEOUT_MS)
+
+    request.on('error', (error: Error) => finish(new Error(`网络请求失败：${error.message}`)))
     request.on('response', (response) => {
       const status = response.statusCode ?? 0
       /*
@@ -128,13 +168,13 @@ function getText(url: string): Promise<string> {
       const stream = response as unknown as NodeJS.ReadableStream
       if (status < 200 || status >= 300) {
         stream.resume()
-        reject(new Error(`HTTP ${status}`))
+        finish(new Error(`HTTP ${status}`))
         return
       }
       const chunks: Buffer[] = []
       stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-      stream.on('error', (error: Error) => reject(new Error(`读取响应失败：${error.message}`)))
-      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+      stream.on('error', (error: Error) => finish(new Error(`读取响应失败：${error.message}`)))
+      stream.on('end', () => finish(null, Buffer.concat(chunks).toString('utf8')))
     })
     request.end()
   })
@@ -213,27 +253,69 @@ async function download(
   mkdirSync(join(dest, '..'), { recursive: true })
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false
+    let idleTimer: NodeJS.Timeout | null = null
+    // 先声明再赋值：`finish` 里要清它，避免依赖"声明在前的 const"这种顺序假设
+    let connectTimer: NodeJS.Timeout | null = null
     const request = net.request(url)
-    request.on('error', (error: Error) => reject(new Error(`下载失败：${error.message}`)))
+
+    const finish = (error: Error | null): void => {
+      if (settled) return
+      settled = true
+      if (connectTimer !== null) clearTimeout(connectTimer)
+      if (idleTimer !== null) clearTimeout(idleTimer)
+      if (error !== null) reject(error)
+      else resolve()
+    }
+
+    /** 卡死检测：连接迟迟不回，或下载中途长时间没有新数据 */
+    connectTimer = setTimeout(() => {
+      finish(new Error(`连接超时（${CONNECT_TIMEOUT_MS / 1000} 秒没有响应）`))
+      try {
+        request.abort()
+      } catch {
+        // 忽略
+      }
+    }, CONNECT_TIMEOUT_MS)
+
+    const armIdle = (): void => {
+      if (idleTimer !== null) clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        finish(
+          new Error(
+            `下载卡住了（${DOWNLOAD_IDLE_TIMEOUT_MS / 1000} 秒没有收到新数据）。` +
+              '请检查网络或代理后重试。'
+          )
+        )
+        try {
+          request.abort()
+        } catch {
+          // 忽略
+        }
+      }, DOWNLOAD_IDLE_TIMEOUT_MS)
+    }
+
+    request.on('error', (error: Error) => finish(new Error(`下载失败：${error.message}`)))
 
     request.on('response', (response) => {
       const status = response.statusCode ?? 0
       const stream = response as unknown as NodeJS.ReadableStream
       if (status < 200 || status >= 300) {
         stream.resume()
-        reject(new Error(`下载失败：HTTP ${status}`))
+        finish(new Error(`下载失败：HTTP ${status}`))
         return
       }
+
+      // 拿到响应头了 → 连接阶段结束，转为"空闲超时"守卫
+      if (connectTimer !== null) clearTimeout(connectTimer)
+      connectTimer = null
 
       const raw = response.headers['content-length']
       const total = Number(Array.isArray(raw) ? raw[0] : (raw ?? 0))
       const hash = createHash('sha512')
       let received = 0
-      let settled = false
 
       const fail = (error: unknown): void => {
-        if (settled) return
-        settled = true
         try {
           out.destroy()
         } catch {
@@ -244,15 +326,17 @@ async function download(
         } catch {
           // 删不掉就算了，下次会覆盖
         }
-        reject(error instanceof Error ? error : new Error(String(error)))
+        finish(error instanceof Error ? error : new Error(String(error)))
       }
 
       const out = createWriteStream(dest)
       out.on('error', fail)
 
+      armIdle()
       stream.on('data', (chunk: Buffer) => {
         received += chunk.length
         hash.update(chunk)
+        armIdle() // 有数据进来 → 重置空闲计时
         const percent = total > 0 ? Math.round((received / total) * 100) : null
         onProgress({
           phase: 'download',
@@ -268,7 +352,6 @@ async function download(
 
       out.on('finish', () => {
         if (settled) return
-        settled = true
 
         // 长度对不上：下载断了或被截断，别拿坏包去装
         if (total > 0 && received !== total) {
@@ -277,7 +360,7 @@ async function download(
           } catch {
             // 忽略
           }
-          reject(new Error(`安装包下载不完整：期望 ${total} 字节，得到 ${received} 字节。`))
+          finish(new Error(`安装包下载不完整：期望 ${total} 字节，得到 ${received} 字节。`))
           return
         }
 
@@ -290,7 +373,7 @@ async function download(
             } catch {
               // 忽略
             }
-            reject(
+            finish(
               new Error(
                 '安装包校验失败（sha512 与发布信息不一致）—— 已删除，不安装。\n' +
                   `期望 ${expectedSha512}\n实际 ${actual}`
@@ -299,7 +382,7 @@ async function download(
             return
           }
         }
-        resolve()
+        finish(null)
       })
     })
 
@@ -337,6 +420,25 @@ export async function installLauncherUpdate(
 
   installing = true
   try {
+    /*
+     * **先检查布局，再下载。**
+     *
+     * 这条规则原来放在 137 MB 下载完之后 —— 用户白等一趟下载，才被告知"这种布局不能装"。
+     * 它只依赖路径，不依赖下载结果，没有理由排在后面。
+     *
+     * 为什么不敢装：NSIS 升级会先把 `$INSTDIR` 里每一项搬到 `%TEMP%\old-install`
+     * （跨盘 = 复制），再整目录删除。数据在里面时这一步要搬 GB 级内容 —— 实测把安装器
+     * 拖死了：应用已关、窗口不再出现、10 GB 留在 %TEMP% 里没清理。
+     */
+    if (dataRootInsideInstallDir()) {
+      throw new Error(
+        '数据目录还在安装目录里面（' +
+          dataRoot() +
+          '）。这种布局下升级会把整个数据目录搬到 %TEMP%，既慢又可能中途失败。\n' +
+          '请先运行 `npm run migrate:data -- --apply`（在源码目录里），或在「设置 → 版本位置」把数据目录指到安装目录之外，再更新。'
+      )
+    }
+
     const dest = installerPath(info.latest)
     // 上一次失败留下的半成品：长度与校验都会挡住它，但先删掉更干净
     if (existsSync(dest)) {
@@ -356,23 +458,6 @@ export async function installLauncherUpdate(
     }
 
     onProgress({ phase: 'install', text: '正在启动安装程序…应用会退出并自动重启', percent: null })
-
-    /*
-     * 数据目录与安装目录重叠时**不敢装**。
-     *
-     * NSIS 升级会先把 `$INSTDIR` 里每一项搬到 `%TEMP%\old-install`（跨盘 = 复制），
-     * 再整目录删除。数据在里面时这一步要搬 GB 级内容 —— 实测把安装器拖死了：
-     * 应用已关、窗口不再出现、10 GB 留在 %TEMP% 里没清理。
-     * 这里提前拦住，把原因说清楚，而不是让用户再经历一次"点了更新就没了"。
-     */
-    if (dataRootInsideInstallDir()) {
-      throw new Error(
-        '数据目录还在安装目录里面（' +
-          dataRoot() +
-          '）。这种布局下升级会把整个数据目录搬到 %TEMP%，既慢又可能中途失败。\n' +
-          '请先运行 `npm run migrate:data -- --apply`（在源码目录里），或在「设置 → 版本位置」把数据目录指到安装目录之外，再更新。'
-      )
-    }
 
     /*
      * 参数见文件头。`detached` + `unref`：安装器要活得比我们久 ——

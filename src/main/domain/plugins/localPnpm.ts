@@ -88,18 +88,13 @@ export function runPnpm(
 
     const tail: string[] = []
     const KEEP = 60
-    let settled = false
-    // 装 git 包可能几十秒；240s 是之前实测过"确实需要"的上限
-    const timer = setTimeout(() => {
-      if (settled) return
-      settled = true
-      try {
-        spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true })
-      } catch {
-        child.kill()
-      }
-      reject(new Error(`pnpm 超过 240 秒仍未结束，已强制终止。\n${tail.slice(-8).join('\n')}`))
-    }, 240_000)
+    /*
+     * **刻意不设总时长上限**：插件包会越来越大（wallpaper-engine 就带了一串子包），
+     * 慢盘上装几分钟是正常的，用固定秒数去卡只会误杀正常操作。
+     *
+     * 真正需要防的是"pnpm 挂住不动" —— 网络层有 pnpm 自己的请求超时，
+     * 而交互式等待已用 `CI=true` 关掉。这里的兜底是 `close` 事件：只要进程退出就返回。
+     */
 
     const decoders = { stdout: createStreamDecoder(), stderr: createStreamDecoder() }
     const buffers = { stdout: '', stderr: '' }
@@ -117,16 +112,16 @@ export function runPnpm(
     }
     child.stdout?.on('data', consume('stdout'))
     child.stderr?.on('data', consume('stderr'))
+    // `close` 与 `error` 只该结算一次：两者都到齐时以先到的为准
+    let settled = false
     child.on('error', (error) => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
       reject(error)
     })
     child.on('close', (code) => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
       resolve({ code: code ?? -1, tail })
     })
   })

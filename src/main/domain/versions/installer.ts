@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createStreamDecoder } from '../../platform/textDecode'
+
+/** 安装 dsh 版本的兜底超时（下载 + 解压 + 依赖安装） */
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { versionBin, versionDir } from '../../platform/paths'
